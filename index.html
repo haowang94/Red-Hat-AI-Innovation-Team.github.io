@@ -1,4 +1,204 @@
 ---
-layout: home
-# Index page
+layout: default
+refactor: true
 ---
+
+{% include lang.html %}
+
+{% assign all_pinned = site.posts | where: 'pin', 'true' %}
+{% assign all_normal = site.posts | where_exp: 'item', 'item.pin != true and item.hidden != true' %}
+
+{% assign posts = '' | split: '' %}
+
+<!-- Get pinned posts on current page -->
+
+{% assign visible_start = paginator.page | minus: 1 | times: paginator.per_page %}
+{% assign visible_end = visible_start | plus: paginator.per_page %}
+
+{% if all_pinned.size > visible_start %}
+  {% if all_pinned.size > visible_end %}
+    {% assign pinned_size = paginator.per_page %}
+  {% else %}
+    {% assign pinned_size = all_pinned.size | minus: visible_start %}
+  {% endif %}
+
+  {% for i in (visible_start..all_pinned.size) limit: pinned_size %}
+    {% assign posts = posts | push: all_pinned[i] %}
+  {% endfor %}
+{% else %}
+  {% assign pinned_size = 0 %}
+{% endif %}
+
+<!-- Get normal posts on current page -->
+
+{% assign normal_size = paginator.posts | size | minus: pinned_size %}
+
+{% if normal_size > 0 %}
+  {% if pinned_size > 0 %}
+    {% assign normal_start = 0 %}
+  {% else %}
+    {% assign normal_start = visible_start | minus: all_pinned.size %}
+  {% endif %}
+
+  {% assign normal_end = normal_start | plus: normal_size | minus: 1 %}
+
+  {% for i in (normal_start..normal_end) %}
+    {% assign posts = posts | push: all_normal[i] %}
+  {% endfor %}
+{% endif %}
+
+<article class="px-1">
+
+
+
+<h1>InstructLab Research | Red Hat AI Innovation Team</h1>
+
+
+
+<div class="flex-grow-1 px-xl-1">
+  <h2>Recent Papers</h2>
+  <ul>
+    <li>
+      <p>
+        <em>A Probabilistic Inference Approach to Inference-Time Scaling of LLMs using Particle-Based Monte Carlo Methods</em> [<u><a href="https://arxiv.org/abs/2502.01618" target="_blank">arXiv</a></u>]<br>
+        <span style="font-size: 0.9em;">Isha Puri, Shivchander Sudalairaj, Guangxuan Xu, Kai Xu, Akash Srivastava</span>
+      </p>
+    </li>
+    <li>
+      <p>
+        <em>Unveiling the Secret Recipe: A Guide For Supervised Fine-Tuning Small LLMs</em> [ICLR, <u><a href="https://arxiv.org/abs/2412.13337" target="_blank">arXiv</a></u>]<br>
+        <span style="font-size: 0.9em;">Aldo Pareja, Nikhil Shivakumar Nayak, Hao Wang, Krishnateja Killamsetty, Shivchander Sudalairaj, Wenlong Zhao, Seungwook Han, Abhishek Bhandwaldar, Guangxuan Xu, Kai Xu, Ligong Han, Luke Inglis, Akash Srivastava</span>
+      </p>
+    </li>
+    <li>
+      <p>
+        <em>Dr. SoW: Density Ratio of Strong-over-weak LLMs for Reducing the Cost of Human Annotation in Preference Tuning</em> [<u><a href="https://arxiv.org/abs/2411.02481" target="_blank">arXiv</a></u>]<br>
+        <span style="font-size: 0.9em;">Guangxuan Xu, Kai Xu, Shivchander Sudalairaj, Hao Wang, Akash Srivastava</span>
+      </p>
+    </li>
+    <li>
+      <p>
+        <em>LAB: Large-Scale Alignment for ChatBots</em> [<u><a href="https://arxiv.org/abs/2403.01081" target="_blank">arXiv</a></u>]<br>
+        <span style="font-size: 0.9em;">Shivchander Sudalairaj, Abhishek Bhandwaldar, Aldo Pareja, Kai Xu, David D. Cox, Akash Srivastava</span>
+      </p>
+    </li>
+  </ul>
+</div>
+
+
+
+<div id="post-list" class="flex-grow-1 px-xl-1">
+  <h2>Recent Posts</h2>
+  {% for post in posts %}
+    <article class="card-wrapper card">
+      <a href="{{ post.url | relative_url }}" class="post-preview row g-0 flex-md-row-reverse">
+        {% assign card_body_col = '12' %}
+
+        {% if post.image %}
+          {% assign src = post.image.path | default: post.image %}
+          {% unless src contains '//' %}
+            {% assign src = post.media_subpath | append: '/' | append: src | replace: '//', '/' %}
+          {% endunless %}
+
+          {% assign alt = post.image.alt | xml_escape | default: 'Preview Image' %}
+
+          {% assign lqip = null %}
+
+          {% if post.image.lqip %}
+            {% capture lqip %}lqip="{{ post.image.lqip }}"{% endcapture %}
+          {% endif %}
+
+          <div class="col-md-5">
+            <img src="{{ src }}" alt="{{ alt }}" {{ lqip }}>
+          </div>
+
+          {% assign card_body_col = '7' %}
+        {% endif %}
+
+        <div class="col-md-{{ card_body_col }}">
+          <div class="card-body d-flex flex-column">
+            <h1 class="card-title my-2 mt-md-0">{{ post.title }}</h1>
+
+            <div class="card-text content mt-0 mb-3">
+              <p>{% include post-description.html %}</p>
+            </div>
+
+            <div class="post-meta flex-grow-1 d-flex align-items-end">
+              <div class="me-auto">
+                <!-- posted date -->
+                <i class="far fa-calendar fa-fw me-1"></i>
+                {% include datetime.html date=post.date lang=lang %}
+
+                <!-- categories -->
+                {% if post.categories.size > 0 %}
+                  <i class="far fa-folder-open fa-fw me-1"></i>
+                  <span class="categories">
+                    {% for category in post.categories %}
+                      {{ category }}
+                      {%- unless forloop.last -%},{%- endunless -%}
+                    {% endfor %}
+                  </span>
+                {% endif %}
+              </div>
+
+              {% if post.pin %}
+                <div class="pin ms-1">
+                  <i class="fas fa-thumbtack fa-fw"></i>
+                  <span>{{ site.data.locales[lang].post.pin_prompt }}</span>
+                </div>
+              {% endif %}
+            </div>
+            <!-- .post-meta -->
+          </div>
+          <!-- .card-body -->
+        </div>
+      </a>
+    </article>
+  {% endfor %}
+</div>
+<!-- #post-list -->
+
+
+
+<div class="flex-grow-1 px-xl-1">
+  <h2>InstructLab</h2>
+  <img src="assets/img/home/pipeline.png">
+
+  <h3>What is InstructLab?</h3>
+  <p>
+    InstructLab is a method for cutomizing large language models (LLMs) to enhance their capabilities. It replaces costly human annotations with taxonomy-guided synthetic data creation and introduces a multi-phase training framework that effectively fine-tunes LLMs on new knowledge and skills. InstructLab provides a scalable, cost-efficient approach for improving LLM performance and instruction-following behavior at target domains. By enabling individual developers and small organizations to incorporate their own data sources, InstructLab facilitates continuous knowledge and skill acquisition, making LLMs more accessible and adaptable.
+  </p>
+
+  <h3>Customizing LLMs for Domain-Specific Expertise</h3>
+  <p>
+    Customizing LLMs from general-purpose tools into domain-specific experts is increasingly in demand by enterprises and individual developers. It enables LLMs to align with organizational guidelines and specialize in relevant areas of expertise. InstructLab offers a solution for model customization, taking any small-sized LLM and using synthetic data creation combined with multi-phased training to infuse the model with domain-specific knowledge and skills. These specialized models can then be deployed for enterprise purposes, offering cost-efficient inference and the ability to run on consumer-grade hardware, making them accessible to smaller organizations while providing full control over data and models.
+  </p>
+</div>
+
+
+
+<div class="flex-grow-1 px-xl-1">
+  <h2>Media Press</h2>
+  <ul>
+    <li>
+      IBM Thinks Small to Win Enterprise AI [<u><a href="https://www.msn.com/en-us/money/other/ibm-thinks-small-to-win-enterprise-ai/ar-AA1sHOch?ocid=Peregrine" target="_blank">MSN</a></u>]
+    </li>
+    <li>
+      IBM Granite 3.0: Practical Open-Source LLM For Enterprise Applications [<u><a href="https://www.forbes.com/sites/stevemcdowell/2024/10/23/ibm-granite-30-practical-open-source-llm-for-enterprise-applications/" target="_blank">Forbes</a></u>]
+    </li>
+    <li>
+      Red Hat Accelerates Generative AI Innovation with Red Hat Enterprise Linux AI on Lenovo ThinkSystem Servers [<u><a href="https://finance.yahoo.com/news/red-hat-accelerates-generative-ai-130000442.html" target="_blank">Yahoo Finance</a></u>]
+    </li>
+    <li>
+      L'intelligence artificielle et la puissance des logiciels open source [<u><a href="https://www.lefigaro.fr/secteur/high-tech/l-intelligence-artificielle-et-la-puissance-des-logiciels-open-source-20241009" target="_blank">Le Figaro</a></u>]
+    </li>
+  </ul>
+</div>
+
+
+
+{% if paginator.total_pages > 1 %}
+  {% include post-paginator.html %}
+{% endif %}
+  
+</article>
