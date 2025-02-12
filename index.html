@@ -5,6 +5,8 @@ refactor: true
 
 {% include lang.html %}
 
+
+
 {% assign all_pinned = site.posts | where: 'pin', 'true' %}
 {% assign all_normal = site.posts | where_exp: 'item', 'item.pin != true and item.hidden != true' %}
 
@@ -162,7 +164,7 @@ refactor: true
 
 <div class="flex-grow-1 px-xl-1">
   <h2>InstructLab</h2>
-  <img src="assets/img/home/pipeline.png">
+  <img src="assets/img/home/pipeline.png" alt="diagram showing the InstructLab pipeline">
 
   <h3>What is InstructLab?</h3>
   <p>
