@@ -3,9 +3,9 @@ title: Lessons on Reproducing R1-like Reasoning in Small LLMs without using Deep
 date: 2025-02-06
 ---
 
-> Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu of the Red Hat AI Innovation Team
+Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu
 
-`Disclaimer: We have been working on this nonstop since the ICML deadline and have lost some of the incredible Shakespearean writing abilities that we traditionally possess. Apologies for any mistakes or sloppiness, we will soon ply ourselves with sugar and return better than ever! This is also a live doc, so we will be updating the sections (especially the recipe/results!) as we get results day by day! We will continue to add more code/details/make this more robust as we go. Join us for our chaotic  yellow brick road journey to Oz R1!`
+> Disclaimer: We have been working on this nonstop since the ICML deadline and have lost some of the incredible Shakespearean writing abilities that we traditionally possess. Apologies for any mistakes or sloppiness, we will soon ply ourselves with sugar and return better than ever! This is also a live doc, so we will be updating the sections (especially the recipe/results!) as we get results day by day! We will continue to add more code/details/make this more robust as we go. Join us for our chaotic  yellow brick road journey to Oz R1!
 
 ## Section 1: Path from CoT to Inference-Time Scaling
 Our journey in R1-like reasoning starts from how CoT data was synthesized to improve models.
