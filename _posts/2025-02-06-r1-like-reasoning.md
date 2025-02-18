@@ -55,8 +55,11 @@ Continue steps 2-4 until all the particles have generated completed answers!
 Pick your “final answer” by choosing whichever particle has the highest RM score.
 For a super easy-to-understand, intuitive explanation of our method, see this video!
 
-<!-- [![Watch the video](https://i.sstatic.net/Vp2cE.png)](https://youtu.be/vt5fpE0bzSY) -->
-\<process\_video\>[https://github.com/probabilistic-inference-scaling/probabilistic-inference-scaling.github.io/blob/main/assets/videos/process\_video.mp4](https://github.com/probabilistic-inference-scaling/probabilistic-inference-scaling.github.io/blob/main/assets/videos/process_video.mp4)\</process\_video\>
+<video width="100%" controls>
+  <source src="https://github.com/probabilistic-inference-scaling/probabilistic-inference-scaling.github.io/blob/main/assets/videos/process_video.mp4" type="video/mp4">
+  Your browser does not support the video tag.
+</video>
+
 
 So what are our results? 
 
@@ -69,9 +72,10 @@ On the MATH dataset, our method:
 - Can scale Qwen2.5 Math 1.5B Instruct to GPT-4o accuracy with only 4 rollouts!
 - Can scale Qwen2.5 Math 7B Instruct achieves o1 level accuracy with only 32 rollouts!
 - Can scale Llama 1B model to almost reach Llama 70B and can scale Llama 8B model to reach GPT-4o!
-- ![][image1]  
-- ![][image2]  
-- ![][image3]![][image4]
+- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/table.png]  
+- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/llama-1b.png]  
+- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/llama-8b.png]
+- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/qwen-7b.png]
 
 
 ### Why is this so cool? 
