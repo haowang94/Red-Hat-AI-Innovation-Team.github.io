@@ -1,11 +1,13 @@
 ---
 title: Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)
-date: 2025-02-06
+date: 2025-02-05
 ---
 
 Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu
 
-> Disclaimer: We have been working on this nonstop since the ICML deadline and have lost some of the incredible Shakespearean writing abilities that we traditionally possess. Apologies for any mistakes or sloppiness, we will soon ply ourselves with sugar and return better than ever! This is also a live doc, so we will be updating the sections (especially the recipe/results!) as we get results day by day! We will continue to add more code/details/make this more robust as we go. Join us for our chaotic  yellow brick road journey to Oz R1!
+> Disclaimer: We have been working on this nonstop since the ICML deadline and have lost some of the incredible Shakespearean writing abilities that we traditionally possess. 
+> Apologies for any mistakes or sloppiness, we will soon ply ourselves with sugar and return better than ever! This is also a live doc, so we will be updating the sections (especially the recipe/results!) as we get results day by day! 
+> We will continue to add more code/details/make this more robust as we go. Join us for our chaotic  yellow brick road journey to Oz R1!
 
 ## Section 1: Path from CoT to Inference-Time Scaling
 Our journey in R1-like reasoning starts from how CoT data was synthesized to improve models.
@@ -72,10 +74,10 @@ On the MATH dataset, our method:
 - Can scale Qwen2.5 Math 1.5B Instruct to GPT-4o accuracy with only 4 rollouts!
 - Can scale Qwen2.5 Math 7B Instruct achieves o1 level accuracy with only 32 rollouts!
 - Can scale Llama 1B model to almost reach Llama 70B and can scale Llama 8B model to reach GPT-4o!
-- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/table.png]  
-- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/llama-1b.png]  
-- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/llama-8b.png]
-- ![][/assets/img/posts/2025-02-06-r1-like-reasoning/qwen-7b.png]
+- ![][/assets/img/posts/2025-02-05-r1-like-reasoning/table.png]  
+- ![][/assets/img/posts/2025-02-05-r1-like-reasoning/llama-1b.png]  
+- ![][/assets/img/posts/2025-02-05-r1-like-reasoning/llama-8b.png]
+- ![][/assets/img/posts/2025-02-05-r1-like-reasoning/qwen-7b.png]
 
 
 ### Why is this so cool? 
@@ -139,3 +141,129 @@ So now we are looking for a way to obtain R1-like reasoning in small LLMs. We ca
 3. RL for Reasoning: After warming up, we perform the same RL training with GRPO.
 4. General Capability: Our approach to obtaining general capability is based on DPO with preference data annotated by a reward model. This reward model is based on recent work from our team and it's a human annotation-free method called Dr. SoW. It matches (or even outperforms) the state of the art. Check it out here: https://arxiv.org/abs/2411.02481.
 
+
+## Results: What Worked, What Didn’t, and What’s Next
+
+Disclaimer:  
+These results are a messy, chaotic, absolutely massive work in progress, and we’ll update code and results as we continue to get them\! We have not gotten very much sleep and we sincerely apologize for any gaps in the results table. Please pray to the gods of LLMs with us to help populate it\! Thank you for your cooperation \<3 
+
+**Bespoke Dataset: A Good Start, but Not Enough**
+
+Like pretty much everyone else, we kicked things off by working with the reasoning dataset created by Bespoke. From what we know, it’s distilled from R1, making it a solid starting point. But for our specific experiments, it didn’t quite hit the mark. Still, we wanted to see how far small models could go by just fine-tuning (SFT) on this dataset—and more importantly, whether training on a math-heavy reasoning dataset could help generalize the model’s reasoning ability to *non-math* tasks.
+
+Turns out, it kinda worked\! Training on this dataset did help smaller Granite and Llama models mimic R1-like reasoning patterns. However, there was a catch: while they *looked* like they were reasoning, their actual benchmark performance didn’t improve after SFT.
+
+So, we took the best SFT checkpoint and ran GRPO on it, hoping that the reasoning skills bootstrapped during fine-tuning would become more refined. Once again… no major improvement in benchmarks for Llama or Granite. 
+
+**BoN with Phi-4: Prompting It to Think**
+
+After some quick brainstorming and research, we decided to give **Phi-4** a shot. This model is seriously underrated—it performs ridiculously well on nearly every benchmark and even shows promising reasoning skills, at least in math. Best part? It’s only **14B parameters** and **fully open source**. Huge shoutout to Microsoft Research for that one\! 🎉
+
+Given our past work with **InstructLab**, we like to think we know a thing or two about **synthetic data generation (SDG)** 😆. So, it didn’t take long to figure out how to prompt Phi-4 into generating reasoning trajectories.
+
+Here’s what we did:
+
+1. For each question, we generated **64 samples**.  
+2. We used a **verifier** (from our inference-scaling paper) to pick the best trajectory—i.e., the one with the correct answer.  
+3. We reformatted the data to match R1’s style, wrapping it in \<|thought|\> blocks **(Can someone check this for precision? 😅)**.  
+4. We used this dataset (D-verified) to fine-tune our small models, followed by another round of GRPO.
+
+This time, we saw some **really interesting results**:
+
+✅ **Math scores improved for Llama**
+
+✅ **AIME scores improved**
+
+✅ **It even solved a problem posed by our chief scientist 😆**
+
+**What We Learned: Two Big Gaps**
+
+After looking at our results (and a bit of soul-searching 😛), we realized two major issues in how our models reasoned compared to R1:
+
+1️⃣ **Short responses:** Our model’s answers were too concise—R1-style reasoning tends to be longer.
+
+2️⃣ **No backtracking:** The model wasn’t self-reflecting or revising its own answers. We had hoped GRPO would make this emerge naturally, but it didn’t.
+
+**What’s Next: Iterating on Phi-4 as Teacher & Student**
+
+Back to the whiteboard we went\! One key insight: maybe it’s just **too hard** for an 8B model to develop reflection *without being explicitly trained on reflection examples*. R1 does this, so maybe we need to as well.
+
+Since R1’s own paper suggests that the model being trained with RL needs to be reasonably strong, we decided to keep using **Phi-4**—not just as the **teacher**, but also as the **student** in our next experiments. Stay tuned. 🚀
+
+—
+
+**Teaching Models to Revise Their Own Thinking**
+
+**Naïve Stitch: Making Mistakes on Purpose (and Fixing Them\!)**
+
+Our first shot at making the model reason more like R1 was pretty simple: **force it to revise its own mistakes**. We took our BoN-generated data and created what we’re calling **D-stitch**.
+
+Here’s how it works:
+
+1\.	For each question, we start with the **thought process from a wrong sample**.
+
+2\.	Then, we add a transition phrase like *“Hold on\! I made a mistake. Let me try again.”*
+
+3\.	Finally, we append the thought process and solution from a **verified** correct sample.
+
+4\.	Bonus: We can add more than one wrong thought before the correct one\!
+
+The results? **A slight improvement**, but the real win was that the model actually started **revising its full reasoning process**. That’s a good sign\! Encouraged by this, we decided to push further and generate even more R1-like training data.
+
+**PF Backtrack: Getting the Model to Doubt Itself**
+
+While revising an entire answer is nice, it’s still not quite the reasoning we’re after. What we really want is **partial backtracking**—where the model recognizes errors midway, doubts itself, and changes course like R1.
+
+This reminded us of something: **particle filtering (or any tree search method)**. Algorithmically, this kind of reasoning looks a lot like pruning bad search paths in a tree. So, we decided to generate backtrack data using particle filtering.
+
+Here’s how we did it:
+
+• We ran our **particle filtering method**, recording all the “dead” particles at each step (basically, failed reasoning paths).
+
+• This gave us a **search tree** where we could verify the final solutions from the correct paths.
+
+• We then synthesized new reasoning data by **intentionally stitching in incorrect branches** before returning to a correct path.
+
+• Whenever the model backtracked, we added a phrase like *“Hold on\! I made a mistake. Let me try again.”*
+
+We’re calling this dataset **D-backtrack**, and it’s designed to **train models to doubt and backtrack at intermediate steps, not just at the end**.
+
+**Gibbs with “But Wait”: Inspired by S1**
+
+While we were working on this, the **S1 paper** (🔗 [https://arxiv.org/abs/2501.19393](https://arxiv.org/abs/2501.19393)) dropped, giving us even more ideas\! Inspired by their approach, we created **D-but-wait**, a dataset designed to push the model toward deeper reasoning.
+
+Here’s how we built it:
+
+* When generating reasoning steps, we **force the model to pause** after completing the first thought.  
+* Then, we append a phrase like **“But wait,”** and **force it to continue reasoning further** before finalizing the solution.
+
+This setup encourages the model to naturally question its first thought, a bit like **Gibbs sampling** where you iterate until the solution stabilizes.
+
+**Next Steps: Refining Backtracking and Doubt Mechanisms**
+
+With these different approaches—D-stitch, D-backtrack, and D-but-wait—we’re getting models that **at least attempt to revise themselves**. But there’s still more to do\! We’re now exploring how to make backtracking even more structured and whether we need larger models to *fully* develop this behavior.
+
+Let’s see where this takes us. 🚀
+
+| Model | Dataset | Method | AIME 2024 (Pass@8) | MATH500 (Pass@8) |
+| ----- | ----- | ----- | ----- | ----- |
+| [Llama 3.1 8B Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) | \- | \- | 6/30 | 73.6 |
+|  | [bespokelabs/Bespoke-Stratos-35k](https://huggingface.co/datasets/bespokelabs/Bespoke-Stratos-35k) | SFT | ⏳ | ⏳ |
+|  | Think-v1-13k (ours) | SFT \+ GRPO | 7/30 | 80.2 |
+| [Phi-4](https://huggingface.co/microsoft/phi-4) | \- | \- | 12/30 | 88.2 |
+|  | Think-v1-13k (ours) | SFT \+ Dr.SoW | 10/30 | 90.8 |
+|  | But-wait-10k (ours) | SFT \+ GRPO | 10/30 | 87.8 |
+|  | Backtrack-22k(ours) | SFT \+ GRPO | 10/30 | ⏳ |
+
+---
+
+If you want to cite this blog post, you can use the following BibTeX entry
+
+```bibtex
+@misc{srivastava2024lessonsonreproducing,  
+      title={Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)},  
+      author={Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona and GX Xu},  
+      url={https://red-hat-ai-innovation-team.github.io/posts/r1-like-reasoning},  
+      year={2025},  
+}  
+```
