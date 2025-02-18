@@ -40,3 +40,16 @@ Inference-time scaling can be computationally expensive, requiring both the **tr
 In other words, **can we train the model to not only generate responses but also judge and refine its own drafts?** This could effectively **amortize** the cost of inference-time scaling by training the model to perform this reasoning process upfront.  
 
 Moving forward, we’ll be focusing our efforts on testing this hypothesis and will continue sharing our findings. Stay tuned!  
+
+---
+
+If you want to cite our work, you can use the following BibTeX entry of the original blog post.
+
+```bibtex
+@misc{srivastava2024lessonsonreproducing,  
+      title={Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)},  
+      author={Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona and GX Xu},  
+      url={https://red-hat-ai-innovation-team.github.io/posts/r1-like-reasoning},  
+      year={2025},  
+}  
+```
