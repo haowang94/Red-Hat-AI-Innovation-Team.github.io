@@ -1,10 +1,14 @@
 ---
-title: Update \#3 - On Reasoning vs Inference-time scaling - Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)
+title: Update 3 - On Reasoning vs Inference-time scaling - Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)
 date: 2025-02-17
 ---
 
-> Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu of the Red Hat AI Innovation Team
+Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu of the Red Hat AI Innovation Team
 
+> This is the third update on our journey to reproduce R1-like reasoning in small LLMs.
+> The original blog post can be found [here](https://red-hat-ai-innovation-team.github.io/posts/r1-like-reasoning) and the first update is [here](https://red-hat-ai-innovation-team.github.io/posts/r1-like-reasoning-update-1) and the second update is [here](https://red-hat-ai-innovation-team.github.io/posts/r1-like-reasoning-update-2).
+
+---
 
 ## Let's Start with the Results  
 
