@@ -1,5 +1,7 @@
 # Sculpting Subspaces: How We Solved Continual Learning in Large Language Models
 
+**Authors:** Nikhil Shivakumar Nayak, Krishnateja Killamsetty, Ligong Han, Abhishek Bhandwaldar, Prateek Chanda, Kai Xu, Hao Wang, Aldo Pareja, Oleg Silkin, Mustafa Eyceoz, Akash Srivastava
+
 ---
 
 ### **Visualizing Our Method**
