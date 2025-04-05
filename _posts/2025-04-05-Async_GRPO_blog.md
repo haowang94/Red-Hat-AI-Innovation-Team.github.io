@@ -1,6 +1,8 @@
 ---
+layout: post
 title: Async-GRPO - Open, Fast, and Performant
 date: 2025-04-05
+image:  'https://hackmd.io/_uploads/HJrSol0ake.svg'
 ---
 
 Written by Aldo Pareja, Mustafa Eyceoz

@@ -1,4 +1,9 @@
-# Sculpting Subspaces: How We Solved Continual Learning in Large Language Models
+---
+layout: post
+title: "Sculpting Subspaces: How We Solved Continual Learning in Large Language Models"
+date: 2025-04-04
+image:  '/images/posts/2025-04-04-orthogonal-subspace-learning/method_overview.png'
+---
 
 **Authors:** Nikhil Shivakumar Nayak, Krishnateja Killamsetty, Ligong Han, Abhishek Bhandwaldar, Prateek Chanda, Kai Xu, Hao Wang, Aldo Pareja, Oleg Silkin, Mustafa Eyceoz, Akash Srivastava
 
@@ -8,7 +13,7 @@
 
 Below is a visual summary from our paper that illustrates our continual learning approach at a high level:
 
-![Adaptive SVD Continual Learning Method](/assets/img/posts/2025-04-04-orthogonal-subspace-learning/method_overview.png)
+![Adaptive SVD Continual Learning Method](/images/posts/2025-04-04-orthogonal-subspace-learning/method_overview.png)
 
 *Figure: Our adaptive SVD method dynamically separates each weight matrix into high-rank (critical) and low-rank (safe-to-update) subspaces. Updates occur exclusively within low-rank directions orthogonal to crucial knowledge.*
 
@@ -263,7 +268,7 @@ One critical requirement for real-world enterprise deployment is that models pre
 - **Multilingual Understanding** (TyDiQA)  
 - **Math Reasoning** (GSM)
 
-![General Ability Evaluation](/assets/img/posts/2025-04-04-orthogonal-subspace-learning/general_ability.png)
+![General Ability Evaluation](/images/posts/2025-04-04-orthogonal-subspace-learning/general_ability.png)
 
 *Figure: General ability evaluation across six core dimensions—factual knowledge (MMLU), general reasoning (BBH), commonsense reasoning (PIQA), reading comprehension (BoolQA), multilingual understanding (TyDiQA), and math reasoning (GSM).*
 

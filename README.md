@@ -1,43 +1,66 @@
-# Chirpy Starter
+# Clancy is an elegant portfolio theme for Jekyll
 
-[![Gem Version](https://img.shields.io/gem/v/jekyll-theme-chirpy)][gem]&nbsp;
-[![GitHub license](https://img.shields.io/github/license/cotes2020/chirpy-starter.svg?color=blue)][mit]
+Clancy is an elegant portfolio theme for Jekyll designed for photographers, designers, illustrators, artists, creatives, etc. This theme will help you professionally introduce yourself to your visitors and showcase your work in a minimalistic style. This super clean and fully optimized theme can be easily customized to suit your needs.
 
-When installing the [**Chirpy**][chirpy] theme through [RubyGems.org][gem], Jekyll can only read files in the folders
-`_data`, `_layouts`, `_includes`, `_sass` and `assets`, as well as a small part of options of the `_config.yml` file
-from the theme's gem. If you have ever installed this theme gem, you can use the command
-`bundle info --path jekyll-theme-chirpy` to locate these files.
+* * *
 
-The Jekyll team claims that this is to leave the ball in the user’s court, but this also results in users not being
-able to enjoy the out-of-the-box experience when using feature-rich themes.
+### Demo
 
-To fully use all the features of **Chirpy**, you need to copy the other critical files from the theme's gem to your
-Jekyll site. The following is a list of targets:
+Check the theme in action [Live Demo](https://clancy.netlify.app/) |
+[Artem Sheludko](https://jekyllthemes.io/developers/artem-sheludko)
 
-```shell
-.
-├── _config.yml
-├── _plugins
-├── _tabs
-└── index.html
-```
+* * *
 
-To save you time, and also in case you lose some files while copying, we extract those files/configurations of the
-latest version of the **Chirpy** theme and the [CD][CD] workflow to here, so that you can start writing in minutes.
+### Theme features
 
-## Usage
+- Works with GitHub Pages (host it for free)
+- Dark and light mode user can select themself
+- 100% responsive Design
+- Clean and Modern Code
+- Optimized for mobile devices
+- Super fast performance ⚡⚡⚡
+- No jQuery, only vanilla JS
+- Social sharing buttons
+- Scroll to top button
+- Syntax highlighting (supports the Jekyll syntax highlighter)
+- Compatible with modern browsers
+- Medium style image zoom
+- Image Lazy loading
+- Image gallery
+- Tags Page
+- Custom logo support
+- Supports contact form (Formspree)
+- Supports MailChimp newsletter
+- Supports Disqus comments
+- Supports Google Analytics
+- Ionicons icons
+- Free Google Fonts
+- Free Updates & Support
 
-Check out the [theme's docs](https://github.com/cotes2020/jekyll-theme-chirpy/wiki).
+* * *
 
-## Contributing
+### Installation
 
-This repository is automatically updated with new releases from the theme repository. If you encounter any issues or want to contribute to its improvement, please visit the [theme repository][chirpy] to provide feedback.
+#### Installing Ruby & Jekyll
 
-## License
+If this is your first time using Jekyll, please follow the [Jekyll docs](https://jekyllrb.com/docs/installation/) and make sure your local environment (including Ruby) is setup correctly.
 
-This work is published under [MIT][mit] License.
+* * *
 
-[gem]: https://rubygems.org/gems/jekyll-theme-chirpy
-[chirpy]: https://github.com/cotes2020/jekyll-theme-chirpy/
-[CD]: https://en.wikipedia.org/wiki/Continuous_deployment
-[mit]: https://github.com/cotes2020/chirpy-starter/blob/master/LICENSE
+### Deployment
+
+To run the theme locally, navigate to the theme directory and run `bundle install` to install the dependencies, then run `jekyll serve` or `bundle exec jekyll serve` to start the Jekyll server.
+
+I would recommend checking the [Deployment Methods](https://jekyllrb.com/docs/deployment-methods/) page on Jekyll website.
+
+* * *
+
+### Documentation
+
+Before using the Clancy theme, please read the attached documentation.
+
+* * *
+
+### Support
+
+<p>If you have any questions, please feel free to contact me by mail <a href="mailto:hi.artemsheludko@gmail.com">Contact</a><p>

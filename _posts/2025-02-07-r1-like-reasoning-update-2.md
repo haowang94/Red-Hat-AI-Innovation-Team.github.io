@@ -1,6 +1,9 @@
 ---
+layout: post
 title: Update 2 - Lessons on Reproducing R1-like Reasoning in Small LLMs without using DeepSeek-R1-Zero (or its derivatives)
 date: 2025-02-07
+image:  'https://probabilistic-inference-scaling.github.io/assets/images/process_video_cover.jpg'
+tags:   [reasoning, inference-time-scaling]
 ---
 
 Written by Akash Srivastava, Isha Puri, Kai Xu, Shivchander Sudalairaj, Mustafa Eyceoz, Oleg Silkin, Abhishek Bhandwaldar, Aldo Genaro Pareja Cardona, GX Xu
