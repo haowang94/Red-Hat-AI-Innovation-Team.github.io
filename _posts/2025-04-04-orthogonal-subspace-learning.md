@@ -1,183 +1,373 @@
-# Sculpting Subspaces: Constrained Full Fine-Tuning in LLMs for Continual Learning
+# Sculpting Subspaces: How We Solved Continual Learning in Large Language Models
 
-Written by Nikhil Shivakumar Nayak, Krishnateja Killamsetty, Ligong Han, Abhishek Bhandwaldar, Prateek Chanda, Kai Xu, Hao Wang, Aldo Pareja, Oleg Silkin, Mustafa Eyceoz, Akash Srivastava.
+---
 
-## Continual Post-Training of LLMs: Why It’s Challenging
+### **Visualizing Our Method**
 
-Imagine deploying a large language model (LLM) in an enterprise setting where **new data and tasks arrive continuously** – customer queries evolve, new products are launched, regulations change. We need to *post-train* the LLM on these new tasks and data to keep it up-to-date. A naive approach would be to periodically fine-tune the model on whatever new dataset comes along. **However, standard fine-tuning can catastrophically overwrite the model’s prior knowledge.** This well-known problem of **catastrophic forgetting** means the LLM might excel at the latest task but *forget how to perform previously learned tasks* or even lose its general capabilities.
+Below is a visual summary from our paper that illustrates our continual learning approach at a high level:
 
-One common workaround to mitigate forgetting is to use **replay buffers**—storing and revisiting samples from previous tasks during training. While this can help preserve prior knowledge, it has several drawbacks. First, **performance still tends to degrade**, especially as the number of tasks grows and the buffer size becomes limited. Second, **access to previous task data is often not feasible** in real-world deployments due to **licensing restrictions, privacy policies, or storage limitations**. This is particularly problematic for LLMs, since their pretraining data is typically proprietary or unavailable after training. In many enterprise or production settings, replay is simply not an option.
+![Adaptive SVD Continual Learning Method](/assets/img/posts/2025-04-04-orthogonal-subspace-learning/method_overview.png)
 
-One might consider **Parameter-Efficient Fine-Tuning (PEFT)** methods like LoRA (Low-Rank Adapters) to mitigate this. In LoRA, we keep the original model weights fixed and train small adapter matrices for each new task. This can preserve the original model’s knowledge to some extent (since the core weights aren’t altered) and avoid having to retrain billions of parameters. **But in a continual learning scenario with many tasks, LoRA-style approaches face scalability issues:** you would accumulate a new adapter for every task. Deploying an LLM with tens or hundreds of LoRA adapters becomes cumbersome in terms of memory and routing which adapter to use. Merging many adapters is non-trivial; the current state-of-the-art, [O-LoRA (Orthogonal Subspace Learning for Language Model Continual Learning)](https://arxiv.org/abs/2310.14152), addresses this by learning orthogonal subspaces for each task, but still does not utilize the full expressivity of the model as it relies on LoRA adapters. Moreover, all previous task adapters must be maintained during training to enforce orthogonality, leading to increased memory usage and reduced scalability. In short, *ad-hoc PEFT hacks don’t truly solve the continual learning problem* – they avoid forgetting by never fully updating the model, at the cost of endless growth of new parameters.
+*Figure: Our adaptive SVD method dynamically separates each weight matrix into high-rank (critical) and low-rank (safe-to-update) subspaces. Updates occur exclusively within low-rank directions orthogonal to crucial knowledge.*
 
-Another alternative is **Parameter-Efficient Fine-Tuning (PEFT)** methods like LoRA (Low-Rank Adapters), which keep the original model weights fixed and train small adapter matrices per task. This helps preserve the model’s existing knowledge and avoids retraining billions of parameters. However, in a **continual learning setting**, these methods face **scalability challenges**: a new adapter must be trained and stored for each task, leading to memory and routing complexity. The current state-of-the-art, [O-LoRA (Orthogonal Subspace Learning for Language Model Continual Learning)](https://arxiv.org/abs/2310.14152), improves this by enforcing orthogonality between adapters. But it still relies on LoRA modules, limiting model expressivity, and requires **retaining all prior task adapters during training** to maintain orthogonality—making it less scalable. In short, *PEFT methods sidestep forgetting by never fully updating the model*, but this comes at the cost of increasing parameter growth and limited adaptability.
+---
 
-The ideal solution would let us **fine-tune all the LLM’s parameters on new tasks (maximizing performance)** *while explicitly preventing catastrophic forgetting* of everything learned so far. This needs to be done **efficiently** – in both computation and memory – because continual updates happen frequently. These are the challenges that **continual learning** for LLMs must address:
+## Introduction: The Challenge of Post-Training Large Language Models (LLMs)
 
-- **Catastrophic Forgetting:** Ensuring new task training does not erase or significantly degrade performance on previous tasks or general skills.
-- **Scalability:** Avoiding an explosion of model parameters or resources as tasks accumulate. The approach should work without needing to store old data or maintain a growing number of adapters.
-- **Efficiency:** Updates should be computationally feasible (e.g., not requiring full retraining from scratch or exorbitant memory for optimizers) and ideally leverage the fact that LLMs’ updates often lie in low-dimensional subspaces.
+In recent years, **Large Language Models (LLMs)** like GPT-4, Gemini 2.5, and Claude 3 have revolutionized artificial intelligence, demonstrating astonishing capabilities across an expansive range of tasks—from answering complex queries and generating coherent narratives, to assisting programmers and solving intricate mathematical problems. These models, trained on massive datasets and billions of parameters, have quickly become indispensable tools in academia and industry alike, showcasing the transformative potential of modern AI systems.
 
-## Sculpting Subspaces: An Adaptive Subspace Approach to Full Fine-Tuning
+However, despite their remarkable capabilities, the practical deployment of LLMs in enterprise environments exposes a critical and yet often overlooked challenge: **continual adaptation**. Unlike static benchmarks or academic experiments, real-world scenarios are fluid, dynamic, and ever-evolving. In enterprises, fresh data streams in continuously, new products are introduced daily, user preferences evolve rapidly, and regulations or compliance requirements frequently change. For instance, consider a customer-service chatbot at a large tech firm: new products or policies require the model to quickly update its internal knowledge. In practice, this means large language models must constantly **update their knowledge and acquire new skills** without forgetting previously learned information. Retraining these enormous models from scratch with each new task or data stream is computationally infeasible, both financially and environmentally, due to the enormous computational resources and energy required. Alternatively, maintaining separate specialized models for every new task or data subset quickly becomes impractical, as it leads to prohibitive maintenance complexity and cost.
 
-Our method, *Sculpting Subspaces*, proposes a novel way to achieve full-model fine-tuning for continual learning by **constraining weight updates to carefully chosen subspaces**. In essence, we *sculpt* a subspace for each task such that the model’s weights are updated **only in directions that won’t interfere with previous tasks**. By doing so, we can fine-tune the full model on new data (for maximum expressive power) while **projecting out any components of the update that would cause forgetting** of past knowledge.
+This essential capability—the ability of a model to continually learn and adapt to new information is known in machine learning literature as **continual learning**. Unfortunately, large language models are notoriously prone to a phenomenon called **catastrophic forgetting**: when models are updated or fine-tuned on new tasks or data, they frequently overwrite or interfere with previously learned knowledge. The result is a severe performance degradation on tasks the model previously excelled at, essentially "forgetting" what it once knew.
 
-How do we determine these special subspaces? The key idea is to use an **adaptive SVD (Singular Value Decomposition)-based decomposition of model updates**. We observe (as also noted in prior work) that the gradients or weight updates of large models tend to live in a *low-rank subspace*. Intuitively, although an LLM has billions of parameters, the *intrinsic dimensionality* of the updates needed for a new task is much smaller. Sculpting Subspaces takes advantage of this by computing a low-rank subspace that captures the important directions for updating the model on the new task, while remaining **orthogonal** to the subspaces that were important for previous tasks.
+Given these practical challenges, continual learning is now arguably the **most crucial bottleneck** in leveraging large language models effectively in real-world, high-stakes applications. Addressing catastrophic forgetting in large-scale neural networks isn't just an academic exercise—it's a fundamental requirement for the deployment and maintenance of scalable, reliable, and continuously improving AI systems.
 
-**Figure 1** illustrates the concept: each task $T_1, T_2, \dots$ has an associated update subspace (shown as different colored directions). When learning a new task $T_t$, we restrict the model’s weight updates to lie in a subspace that is **disjoint (orthogonal)** from the subspaces used by tasks $1$ through $t-1$. This ensures that the new task’s learning will not erase the knowledge encoded in those earlier subspaces. At the same time, by allowing the update within a fresh subspace for task $T_t$, the model has the capacity to learn the new task properly (we are not just freezing the model).
+In this blog post, we describe a recent breakthrough we developed to address this very challenge: a novel, theoretically-grounded method that enables continual fine-tuning of large language models **with near negligible levels of catastrophic forgetting**, while fully leveraging the model’s expressive capacity. Unlike current approaches that freeze large parts of the model or add task-specific modules, our solution elegantly repurposes the internal capacity of the model itself, effectively learning new tasks without sacrificing previously acquired knowledge. 
 
-![Overview of the method: each task’s gradients are projected into an subspace that is orthogonal to prior tasks’ subspaces, preventing interference while allowing learning.](/assets/img/posts/sculpting-subspaces/method_overview.png)
+We call our method **"Sculpting Subspaces"**—because it selectively reshapes and refines the model's internal parameter space, carving out unused regions for new tasks, all the while carefully preserving essential prior knowledge. In the following sections, we'll dive deeper into the concept of catastrophic forgetting, explore the limitations of existing solutions, and then fully unveil how our adaptive singular value decomposition (SVD)-based approach can radically transform the way we think about continual learning and enterprise-scale deployment of large language models.
 
-Formally, suppose after learning tasks $1$ to $t-1$ we have an orthonormal basis $U_{1:\!(t-1)}$ spanning the accumulated “old tasks” subspace (this could be derived from the gradients or weight changes from those tasks). When training on task $t$, at each update step we compute the gradient $\mathbf{g}_t$ for the current model parameters. We then **project $\mathbf{g}_t$ onto the subspace orthogonal to all previous tasks**: 
+## The Elephant in the Room: Catastrophic Forgetting
+
+Imagine you're training an intelligent assistant to handle customer support at your company. Initially, the assistant learns everything about your current products and customer needs. It performs brilliantly—answering questions, handling complaints, and providing clear solutions. A few months later, your company launches a new product line. Naturally, you update your assistant to understand and support these new products. But then something surprising and frustrating happens: suddenly, the assistant struggles to answer basic questions about your older products—questions it previously answered flawlessly.
+
+This phenomenon isn't hypothetical; it’s a well-known, pervasive problem in machine learning called **"catastrophic forgetting."** At its core, catastrophic forgetting occurs when a neural network is updated to learn a new task or incorporate new data, and in the process, it inadvertently erases or significantly damages knowledge it previously acquired. Neural networks, especially the enormous transformer-based architectures powering today's most powerful LLMs, represent knowledge through distributed connections between millions—or even billions—of parameters. When these connections are updated to accommodate new information, the precise tuning that previously enabled high performance on older tasks often gets disrupted. For example:
+
+- **Enterprise Knowledge Management**: Companies regularly update policies, introduce new products, or retire old services. Each update risks impairing a language model’s ability to retrieve or utilize previously learned knowledge crucial to ongoing customer interactions or internal operations.
+
+- **Medical Applications**: Consider a healthcare-focused language model that assists clinicians by providing diagnostic guidance or referencing up-to-date treatment protocols. If updating the model with the latest medical research causes it to "forget" critical older knowledge—like standard drug interactions or established clinical procedures—the consequences could be severe and potentially dangerous.
+
+The issue is further magnified by the fact that in practical scenarios, updates aren't occasional—they're **frequent and continuous**. Enterprises experience a near-constant influx of data, shifting customer expectations, and evolving business strategies. If every incremental update to the language model leads to catastrophic forgetting, the model quickly becomes unreliable and potentially unusable, resulting in lost trust, increased operational costs, and significant frustration among users and stakeholders.
+
+Thus, catastrophic forgetting is not just a theoretical curiosity—it’s a profound challenge that urgently demands robust solutions. If large language models are to realize their full potential in the real world, we must equip them with the capability to **continuously learn, update, and adapt**—without losing their accumulated knowledge.
+
+## Why Existing Solutions Fall Short
+
+So, catastrophic forgetting is clearly a significant obstacle. Naturally, the machine learning community has proposed various solutions to tackle it. Unfortunately, most existing approaches come with notable limitations and fail to fully address this challenge in practice. Let's break them down one by one.
+
+### **Replay Buffers**: Why Revisiting Old Data Isn't Enough
+
+One common workaround to mitigate forgetting is the use of **replay buffers**—storing and periodically revisiting examples from previously learned tasks during training of new tasks. The idea here is intuitive: if the model regularly revisits older data, it should, in theory, retain previously learned information.
+
+However, while replay buffers help to some extent, they introduce several practical and fundamental issues:
+
+- **Performance Still Degrades:**  
+  Even with replay, performance gradually drops as the number of tasks increases. The buffer size is typically limited due to memory constraints, meaning older tasks inevitably get underrepresented over time, causing slow and steady forgetting.
+
+- **Data Availability Constraints:**  
+  In enterprise settings, it's often simply not possible to retain previous task data indefinitely. Licensing agreements, strict privacy regulations (such as GDPR or HIPAA), and proprietary data ownership rules can prohibit continuous storage or reuse of past training data.
+
+- **Impracticality for Large Models:**  
+  For large language models trained on massive, web-scale datasets (e.g., GPT-4, LLaMA-2), maintaining even a small representative buffer is typically infeasible or impossible—both due to data privacy issues and the sheer storage size required.
+
+So, while replay buffers seem promising at first glance, they're hardly a silver bullet. In many realistic deployments, especially involving LLMs, replay buffers simply aren't a practical solution.
+
+---
+
+### **Parameter-Efficient Methods (Adapters, LoRA)**: Efficient but Constrained
+
+To avoid replay altogether, researchers have turned towards methods that **freeze most of the pretrained model parameters** and only update small task-specific subsets. Popular methods in this category include Adapters and Low-Rank Adaptation (LoRA). The intuition here is clear: by limiting parameter updates to a tiny fraction of the model, interference with previously learned knowledge should be minimized.
+
+However, despite their efficiency, these methods have serious limitations:
+
+- **Limited Model Expressivity:**  
+  By freezing the vast majority of model parameters, you're essentially forcing your model to learn new tasks within a very narrow parameter space. Imagine trying to repaint your house using only one small brush—you'll quickly run out of flexibility, and the result won't look great.
+
+- **Scalability Issues:**  
+  Every new task adds new parameters—small adapters or LoRA modules. Over time, these additional parameters pile up, increasing memory usage and inference complexity, gradually undermining the original promise of efficiency.
+
+- **Performance Ceiling:**  
+  Because updates occur only in restricted subspaces, models struggle to achieve top-tier performance on tasks that differ significantly from previous ones, especially over long sequences of tasks. Eventually, this limited flexibility can severely constrain the overall capability of the model.
+
+So yes, LoRA might be efficient. But let's be blunt—if your goal is to maintain state-of-the-art performance in continuously evolving tasks, it’s ultimately a waste of your valuable time (😜).
+
+---
+
+### **Model Merging Methods (SLERP, TIES)**: Powerful but Impractical
+
+Another creative line of solutions involves **model merging methods**—approaches like SLERP (Spherical Linear Interpolation) or TIES (Task-Informed Ensemble Synthesis). These methods train separate models or adapters for each task and later combine (or merge) their parameters into a unified model.
+
+Though conceptually elegant, these techniques quickly run into their own set of problems:
+
+- **High Computational Overhead:**  
+  Training multiple separate models or adapters—and then merging them—requires massive computational resources. This cost escalates quickly as the number of tasks increases.
+
+- **Complexity and Expertise Required:**  
+  Merging model parameters isn't straightforward; it demands careful tuning, hyperparameter optimization, and expert judgment. Without this, merged models often perform significantly worse than individually trained models.
+
+- **Suboptimal Performance:**  
+  Even after extensive tuning, model merging typically achieves lower performance than training a single model simultaneously on all tasks (multitask learning). Achieving good results consistently requires a prohibitive amount of experimentation and fine-tuning.
+
+For real-world enterprise deployments, this complexity makes model merging largely impractical. You need something simpler, more efficient, and easier to maintain.
+
+---
+
+Given these limitations, we clearly need a fresh perspective—one that offers a fundamentally new approach to continual learning. And that's exactly what we'll introduce next.
+
+## Sculpting Subspaces: A Novel Solution Using Adaptive SVD
+
+This brings us to our paper’s approach, which we fondly call **"Sculpting Subspaces."** To understand this intuitively, imagine you're an artist sculpting a statue from a block of marble. The statue you carve represents the critical knowledge your model has acquired. Now, when new tasks arrive, rather than recklessly reshaping your sculpture (which could damage its existing features), you carefully carve into unused or less important parts of the marble. You reshape the edges, refine the details—but crucially, you leave the core sculpture intact.
+
+That's precisely how our method works. We leverage **Singular Value Decomposition (SVD)**—a powerful mathematical tool that decomposes matrices into simpler, interpretable parts—to identify which parts of the model's internal "marble" (parameters) can safely be updated, and which parts encode critical knowledge that must be preserved.
+
+### **Why SVD? An Intuition**
+
+Neural network parameters, particularly in large language models (LLMs), often contain substantial redundancy. Recent research confirms that many directions (combinations of parameters) within these networks don't meaningfully impact the model’s performance—they essentially represent unused capacity or "noise" ([Sharma et al., 2023](https://arxiv.org/abs/2312.13558), [Hartford et al., 2024](https://arxiv.org/abs/2406.06623)). SVD lets us mathematically identify these unused directions by decomposing a weight matrix ($\mathbf{W}$) into simpler components:
 
 $$
-\mathbf{g}_t^{\perp} \;=\; \left(I - U_{1:\!(t-1)}\,U_{1:\!(t-1)}^\top\right)\, \mathbf{g}_t\,,
-$$ 
+\mathbf{W} = \mathbf{U} \Sigma \mathbf{V}^\top
+$$
 
-where $U_{1:\!(t-1)}\,U_{1:\!(t-1)}^\top$ is the projection matrix onto the subspace of previous tasks. This $\mathbf{g}_t^{\perp}$ is the component of the gradient that lies in the *new* directions only, with any part that pointed along old tasks’ directions removed. We then **apply $\mathbf{g}_t^{\perp}$ to update the model weights** (using standard optimizer steps). By construction, this update has no first-order effect on the loss of previous tasks – it is *orthogonal* to their gradient subspace, meaning $\mathbf{g}_t^{\perp}$ does not change the model in directions that would increase the loss on those tasks. Theoretically, if $U_{1:\!(t-1)}$ exactly spanned the space of all important weight changes for earlier tasks, then this orthogonal projection guarantees no forgetting (to first order). In practice we maintain a finite basis that approximates that space.
+Here:
 
-**How do we obtain $U_{1:\!(t-1)}$?** This is where adaptive SVD comes in. As we train on each task, we perform a **singular value decomposition on the accumulated gradient updates** (or weight delta) to identify the top singular vectors. These top-$k$ singular vectors form a basis for the *subspace in which most of that task’s learning happened*. We treat those as the “important directions” for that task. For example, after finishing task $T_1$, we take the gradient covariance matrix or a batch of gradients from $T_1$ and perform SVD to get a small set of orthogonal directions $U_1$ that capture the significant updates for $T_1$. Similarly, after $T_2$ we get $U_2$, and so on. We then **accumulate** the subspace bases: for task $t$, the union of all previous $U_i$ (for $i < t$) constitutes $U_{1:\!(t-1)}$. We ensure each new $U_t$ is chosen to be orthogonal to the span of prior ones (this can be done by projecting out the old subspace from the gradient matrix before doing SVD, or by orthonormalizing the combined set).
+- $\mathbf{U}$ and $\mathbf{V}$ represent sets of orthogonal directions (vectors).
+- $\Sigma$ is a diagonal matrix containing singular values that tell us how important each direction is. Large singular values indicate important directions ("high-rank") that encode critical knowledge, while small singular values indicate less important, redundant directions ("low-rank").
 
-Crucially, the subspace for each task is not fixed a priori – it is determined *adaptively* based on the model’s gradients during learning. If the model needs to move in a new direction to learn the task, the SVD will capture that. We also allow the subspace for the current task to **expand gradually** if needed: as training on task $T_t$ progresses, if we detect that gradients start to have significant components outside the current subspace, we can update the subspace basis (e.g., perform another SVD on a larger set of recent gradients) to include those new directions. This adaptive subspace tracking ensures we aren’t locking the model into an overly rigid space – it can still carve out whatever directions are necessary for the new task, but it *adds* those as new basis vectors rather than entangling with old ones.
+By clearly identifying these directions, we can "sculpt" our parameter updates strategically:
 
-Mathematically, suppose $G_t \in \mathbb{R}^{P\times N}$ represents a matrix whose columns are $N$ sampled gradients during training on task $t$ (each of dimension $P$, the number of parameters). We can compute a rank-$k$ SVD: $G_t \approx U_t \Sigma V^\top$, where $U_t \in \mathbb{R}^{P\times k}$ has orthonormal columns. We choose $U_t$ such that it captures most variance of $G_t$. Then we orthonormalize $U_t$ against $U_{1:\!(t-1)}$ (if any overlap) to ensure disjointness. The columns of $U_t$ are then stored as the **subspace directions for task $t**. By limiting $k$ (the subspace dimensionality per task) to a modest size, we also ensure our method remains memory-efficient – we only store a few vectors per task. Empirically, even $k$ on the order of a few tens can be enough to capture the gist of large models’ updates.
+- **High-rank directions (large singular values)**: Preserve these, since they're crucial for retaining previously learned tasks.
+- **Low-rank directions (small singular values)**: Safely update these directions to learn new tasks, since they don't significantly impact previous knowledge.
 
-### Theoretical Insight: Why Orthogonal Subspaces Prevent Forgetting
+This intuitive approach elegantly balances knowledge retention (stability) with flexibility for learning new information (plasticity)—exactly what's needed for continual learning.
 
-The orthogonal projection of gradients provides a theoretical safeguard: for any previous task $i < t$, the gradient of its loss $\nabla \! L^{(i)}$ is (approximately) orthogonal to the update direction for task $t$. In formula, if $\Delta W_t$ is the total weight change applied for learning task $t$ (accumulation of projected gradients), our procedure aims to satisfy 
+---
+
+### **Under the Hood: How Adaptive SVD Enables Continual Learning**
+
+Now, let's dive a little deeper into how exactly our adaptive SVD method works, step-by-step:
+
+#### **1. Dynamically Identifying High- and Low-Rank Subspaces**
+
+For each task, we first perform a quick Singular Value Decomposition (SVD) on each weight matrix in our model (for example, attention and feedforward layers in LLaMA-2):
 
 $$
-\nabla_W L^{(i)}(W_{t-1}) \;\perp\; \Delta W_t \qquad \text{for all } i < t\,.
-$$ 
+\mathbf{W}^{(l)} = \mathbf{U}^{(l)} \Sigma^{(l)} (\mathbf{V}^{(l)})^\top
+$$
 
-This means the first-order change in the loss $L^{(i)}$ due to $\Delta W_t$ is zero: $\nabla L^{(i)} \cdot \Delta W_t = 0$. In other words, to first order the update for task $t$ does not interfere with task $i$’s performance. This is analogous to techniques like Orthogonal Gradient Descent in smaller models, but here extended and applied at the **subspace level for a full LLM**. In practice, our adaptive SVD ensures $\Delta W_t$ is composed only of directions that were *not used* (or were least significant) for previous tasks, which strongly mitigates forgetting. Additionally, by updating full model weights (within the allowed subspace), our approach can leverage any redundancy or under-utilized capacity of the model to encode new knowledge, rather than overwriting the important parts of the network that encode old skills.
+We sort singular values in descending order. This separates directions into two intuitive categories:
 
-## Algorithm: Constrained Full Fine-Tuning via Subspace Projections
+- **High-rank subspace**: Directions with large singular values, encoding critical knowledge from prior tasks.
+- **Low-rank subspace**: Directions with small singular values, representing unused model capacity or redundant parameters.
 
-The procedure can be summarized as an algorithm that runs continually as new tasks arrive. **Algorithm 1** below outlines the training loop with subspace constraint:
+#### **2. Determining Layer Importance through Input–Output Similarity**
 
-```text
-**Algorithm 1: Sculpting Subspaces for Continual Learning**
+But not all layers are created equal. Some layers predominantly pass information through the model, while others significantly transform it. Inspired by [AdaSVD](https://www.arxiv.org/abs/2502.01403), we calculate the importance of each layer dynamically by measuring how much a layer transforms its input to output activations:
 
-Input: Pre-trained LLM weights W_0, sequence of tasks T_1,...,T_n, 
-       subspace rank k (per task), SVD update interval m steps.
+$$
+I^{(l)} = \frac{1}{N} \sum_{i=1}^{N}\text{cosine\_similarity}(\mathbf{X}_i^{(l)}, \mathbf{Y}_i^{(l)})
+$$
 
-Initialize U_prev = [ ]  (empty basis for previous tasks)
+- If inputs and outputs are highly similar, this layer mostly preserves information and thus should retain more singular vectors.
+- If they’re dissimilar, it may indicate that the layer squashes input in certain directions effectively making it low-rank, so these directions can be repurposed for learning new tasks.
 
-For t = 1 to n:  (for each new task in sequence)
-    if t == 1:
-        Train W on task T_1 normally (full fine-tuning) using optimizer (e.g. Adam).
-        Collect gradient snapshots G_1 from training (or weight delta ΔW_1).
-        Compute top-k singular vectors U_1 = SVD_k(G_1)  (U_1 is P x k matrix).
-        U_prev = U_1  (store subspace for task 1)
-    else:
-        Initialize an empty subspace for current task: U_t = [ ].
-        For each training step j = 1,2,... on task T_t:
-            Compute current gradient g (dimension P).
-            # Project out previous tasks' subspace:
-            g_perp = g - U_prev (U_prev^T g)   (in other words, (I - U_prev U_prev^T) g).
-            Use g_perp to update W (e.g. W <- W - η * g_perp for SGD).
-            (Optionally accumulate g_perp into a buffer of gradients for SVD.)
-            If j is a multiple of m:  # time to update subspace
-                Perform SVD on buffered gradients to get top-k basis U_t.
-                Orthonormalize U_t w.r.t. U_prev (remove any components along old subspace).
-        End for
-        Freeze task t's basis: U_t (size P x k).
-        Augment U_prev = [U_prev, U_t]  (append this basis to the orthonormal basis set).
-    end if
-End for
+We normalize these importance scores across layers to prioritize parameter updates strategically.
 
-Output: Updated model W_n that has learned all tasks 1..n, and bases U_1,...,U_n.
-```
+#### **3. Adaptive Rank Selection Based on Layer Importance**
 
-In plain terms, for the first task we just fine-tune normally and record the main directions of change. For each subsequent task, we always remove any gradient component that lies in the span of all earlier tasks’ bases (denoted `U_prev` above) before applying the update. We periodically refresh the current task’s own subspace `U_t` by SVD on recent gradients – this lets the algorithm **discover new directions** needed for the task that were not covered by previous bases. After finishing a task, we add its basis to the set of “used directions” so that future tasks will protect it. The orthonormalization step ensures `U_prev` remains orthonormal and can be used as a projection matrix efficiently.
+Instead of arbitrarily choosing how many singular vectors to preserve, we use layer importance scores to adaptively determine how much "marble" (parameters) we must preserve:
 
-**Memory and Compute Footprint:** Notice that we do not store any actual data from past tasks – we only carry forward the subspace matrices $U_i$. Each $U_i$ has dimension $P \times k$, where $P$ is number of model parameters and $k$ is typically small (like 16 or 32). Storing these is trivial compared to model weights. The main extra compute is performing an SVD every $m$ steps on a chunk of gradients; $m$ can be set so that this is infrequent. There are also known incremental techniques to update SVD or maintain a running subspace basis which could further reduce overhead. In our experiments, the overhead of subspace computation was negligible compared to the overall training cost on each task, thanks to the low intrinsic dimensionality.
+$$
+r^{(l)} = \mathrm{mrr} + I^{(l)}(\mathrm{trr} - \mathrm{mrr})
+$$
 
-## Experimental Results
+Here:
 
-We evaluated Sculpting Subspaces on multiple continual learning benchmarks and compared it to baseline approaches. Our goals were twofold: **(a)** Verify that it **prevents catastrophic forgetting** and preserves the model’s original general capabilities (alignment, reasoning skills, etc.), and **(b)** Ensure that it achieves **high performance on the new tasks** (ideally matching full fine-tuning with no constraints).
+- **Minimum Retention Ratio (mrr)** and **Target Retention Ratio (trr)** are hyperparameters (set to 0.1 and 0.8 respectively based on empirical observations) that control how aggressively we update parameters.
+- More important layers (high $I^{(l)}$) retain more singular vectors, ensuring stability for crucial knowledge. Less important layers safely update more aggressively, efficiently adapting to new tasks.
 
-### Continual Learning on Standard Benchmarks (5 Tasks and 15 Tasks)
+#### **4. Ensuring Orthogonal Updates: Protecting Crucial Knowledge**
 
-First, we tested on a **standard CL benchmark of 5 tasks** commonly used in prior work (a sequence of five text classification tasks: AG News, Amazon Reviews, Yelp Reviews, DBpedia, Yahoo Answers). We also evaluated on a **longer sequence of 15 tasks** by combining several datasets (the 5 above plus 4 GLUE language understanding tasks and 5 SuperGLUE tasks, and one additional domain task), following the setup of Razdaibiedina et al. (2023). We measure the final **Average Accuracy** (AA) across all tasks after sequentially training the model on each task in order. A higher average accuracy means less forgetting (if the model retains performance on early tasks while also doing well on later tasks).
+Finally, when updating model parameters, we ensure that updates remain completely orthogonal (at right angles) to the high-rank subspace. This crucial step prevents accidental overwriting of important previous knowledge:
 
-<!-- Table 1 image: results_summary.png -->
-**Table 1: Average accuracy (%) on a 5-task sequence vs a 15-task sequence.** Higher is better. “Naive FT” = fine-tuning all weights sequentially without any forgetting mitigation. O-LoRA is an orthogonal adapter baseline (previous state-of-art). Sculpting Subspaces achieves near-perfect retention on the 5-task benchmark and significantly outperforms baselines on the challenging 15-task benchmark.
+$$
+\nabla \mathbf{W}^{(l)}_{\mathrm{proj}} = \nabla \mathbf{W}^{(l)} - \mathbf{U}^{(l)}_{\text{high}}(\mathbf{U}^{(l)}_{\text{high}})^\top \nabla \mathbf{W}^{(l)} \mathbf{V}^{(l)}_{\text{high}}(\mathbf{V}^{(l)}_{\text{high}})^\top
+$$
 
-| Method          | 5-Task Avg. Acc. | 15-Task Avg. Acc. |
-|-----------------|-----------------:|------------------:|
-| Naive FT (full) | 81.3             | 52.5              |
-| Sequential LoRA | 85.7             | 60.4              |
-| **O-LoRA (baseline)** | 96.2      | 75.8              |
-| **Sculpting Subspaces (ours)** | **97.5** | **78.6**     |
-| Joint Training (upper bound) | 98.1      | 80.0              |
+By projecting gradients this way, we guarantee that every update for a new task is safely confined to the unused low-rank subspace, leaving the model’s previous knowledge intact. Leveraging the internal geometry of LLM parameters, we efficiently balance stability and adaptability, opening the door for genuinely lifelong learning in real-world deployments.
 
-*In Table 1,* we see that a naive full fine-tuning strategy suffers considerable forgetting, especially in the 15-task case (only about 52.5% average accuracy, meaning it barely remembers half the tasks by the end). Using adapters like LoRA sequentially helps a bit (60.4%), but still falls short. The **O-LoRA** baseline – which, like our method, enforces orthogonality between tasks’ LoRA updates – performs much better (around 96% on 5 tasks and 76% on 15 tasks), confirming the effectiveness of orthogonal subspace learning. Our **Sculpting Subspaces** method reaches **97.5%** on the 5-task benchmark, essentially matching the multitask joint training upper bound (where the model is trained on all tasks together with full access to data). Even on the much harder 15-task sequence, we achieve about **78.6%** average accuracy, outperforming O-LoRA and coming very close to the joint-training upper bound (~80%). In practice, this means our model forgets very little even after a long sequence of varied tasks – it performs nearly as well as if it had unlimited memory or could train on everything simultaneously.
+## Results that Speak for Themselves: Empirical Evaluation 🚀
 
-### Results on the TRACE Continual Learning Benchmark
+Great theories and clever methods are exciting—but at the end of the day, what matters most are results. Can our adaptive SVD-based approach truly solve catastrophic forgetting? Can it outperform state-of-the-art solutions like O-LoRA? Let's find out!
 
-Next, we evaluate on **TRACE**, a recent comprehensive benchmark for continual learning in LLMs. TRACE consists of a sequence of 8 diverse tasks designed to stress-test an aligned language model’s ability to continuously learn. These tasks span domains like specialized knowledge, multilingual translation, code generation, and mathematical reasoning – a much more challenging and varied mix than the classification tasks above. A hallmark of TRACE is that after training on all its tasks, models tend to suffer *significant loss in their original general abilities and alignment* ([[2310.06762] TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models](https://arxiv.org/abs/2310.06762#:~:text=multilingual%20capabilities%2C%20code%20generation%2C%20and,to%20preserving%20certain%20capabilities%20of)) ([[2310.06762] TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models](https://arxiv.org/abs/2310.06762#:~:text=automatic%20evaluation%20of%20LLMs,this%2C%20we%20introduce%20the%20Reasoning)), as noted by the benchmark authors.
+To answer these questions thoroughly, we evaluated our method on two distinct sets of benchmarks:
 
-In our experiments, we used a strong base model (an instruction-tuned LLM) and fine-tuned it on the TRACE tasks sequentially. We compare the final performance on the TRACE tasks and observe how well our approach balances learning vs. forgetting.
+- **Standard Continual Learning (CL) benchmarks:** Consisting of multiple sequential classification tasks (like AG News, Amazon Reviews, DBpedia, and more).
+- **TRACE benchmark:** A more challenging real-world scenario involving instruction-following and complex reasoning tasks.
 
-<!-- Table 2 image: trace_results.png -->
-**Table 2: Performance on the TRACE benchmark (8 tasks).** We report the average task performance (%) after continual training on all 8 tasks. Sculpting Subspaces maintains high performance on the TRACE tasks while standard fine-tuning struggles once tasks accumulate.
+Let's explore the results step by step.
 
-| Method                 | Avg. Performance on TRACE |
-|------------------------|--------------------------:|
-| Naive Full Fine-Tuning | 45.8%   |
-| Sequential LoRA        |  Fifty-something    |
-| O-LoRA Baseline        |  68.5%   |
-| **Sculpting Subspaces**  |  **72.3%**  |
+---
 
-*Table 2* shows that on TRACE, a naive approach fails to achieve good overall performance (the average is below 50%, indicating it severely underperforms on some of the tasks due to catastrophic forgetting of earlier ones). The orthogonal subspace methods do much better: O-LoRA lifts the average to around 68.5%. Our method further improves to **72.3%**, meaning it learns each new TRACE task nearly as well as if it were training from scratch, *while* preserving performance on the earlier TRACE tasks. In fact, Sculpting Subspaces was able to almost completely avoid forgetting within the TRACE sequence – e.g., the first task’s performance only dropped a few points by the end, instead of collapsing to near-zero as observed with naive fine-tuning. At the same time, the new tasks (like code generation tasks later in the sequence) were learned to high accuracy because our method could allocate new dimensions for those skills.
+## 🧑‍🔬 Standard Continual Learning (CL) Benchmarks
 
-### Preserving General Capabilities
+We first evaluated our method on two widely-used CL benchmarks:
 
-A major concern in continual fine-tuning of foundation models is **preserving the general abilities** and broad knowledge that the model acquired during pre-training and alignment. For example, we want the model to retain its language fluency, world knowledge, reasoning skills, and so on – not just perform well on the narrow sequence of tasks it was trained on. To test this, we evaluated models on **held-out benchmarks that were not part of the fine-tuning tasks**, measuring how much of the original model’s prowess remains after continual learning.
+1. **Standard 5-task Benchmark** (AG News, Amazon Reviews, Yelp Reviews, DBpedia, Yahoo Answers)
+2. **Extended 15-task Benchmark** (combining classification tasks from GLUE, SuperGLUE, IMDB, and the original 5-task dataset)
 
-We use **MMLU (Massive Multitask Language Understanding)** as a representative general knowledge benchmark (it tests the model with exam questions across 57 subjects, from history to mathematics). We compare the zero-shot accuracy on MMLU before and after continual learning. We also report a **General Ability (GA) score** which averages a few other broad evaluations (for instance, we included a reasoning benchmark and a trivia QA test to cover different aspects of general ability).
+We compared our method against multiple baseline techniques, including:
+- **SeqFT**: Naive sequential full-model fine-tuning (prone to severe forgetting).
+- **Replay buffers**: Revisiting old data to prevent forgetting.
+- **LoRA-based methods** (SeqLoRA, IncLoRA, and state-of-the-art O-LoRA).
+- **Regularization methods** (EWC, LwF).
+- **Prompt-based methods** (L2P, ProgPrompt).
+- **Multi-task learning (MTL)**: Ideal upper-bound trained simultaneously on all tasks.
 
-<!-- Table 3 image: general_ability.png -->
-**Table 3: General ability retention after continual learning.** We report the original model’s performance versus after training on 15 tasks (for baseline and our method). Metrics include MMLU (zero-shot accuracy %) and an aggregated General Ability score. Sculpting Subspaces nearly preserves the model’s original capabilities, whereas naive fine-tuning severely degrades them.
+Here's how our Adaptive SVD method stacks up:
 
-| Model Variant                     | MMLU Accuracy | General Ability Score |
-|-----------------------------------|--------------:|----------------------:|
-| Original Pretrained (Aligned) LLM | 35.0%         | 100 (baseline)        |
-| After 15-task naive fine-tuning   | 22.4%         | 68                    |
-| After 15-task with O-LoRA         | 33.6%         | 94                    |
-| After 15-task with **Sculpting Subspaces** | **34.5%**  | **97**           |
+### 🎯 **Performance on Standard CL Benchmarks (T5-Large Model)**
 
-*Table 3* highlights a dramatic difference. The original model scored about 35% on MMLU (which is typical for a 7B-13B class model) – this is our reference point (100 on the GA composite score). After undergoing 15 sequential fine-tuning tasks in a naive way, the model’s zero-shot MMLU accuracy plummeted to ~22%, and its overall GA score dropped to 68. In other words, it lost a large chunk of its general world knowledge and problem-solving skills; this aligns with observations like an aligned LLM’s math reasoning accuracy dropping from 28.8% to 2% on GSM8K in prior work ([[2310.06762] TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models](https://arxiv.org/abs/2310.06762#:~:text=automatic%20evaluation%20of%20LLMs,this%2C%20we%20introduce%20the%20Reasoning)). Using O-LoRA helped a lot – the model retained ~33.6% on MMLU, almost as good as original, and about 94% of its GA score. Our full fine-tuning approach with Sculpting Subspaces is able to **preserve virtually all** of the general capabilities (34.5% MMLU, ~97 GA). This is remarkable because we did **update all the model’s weights** – normally one would expect some drift – but thanks to our subspace constraints, the broad knowledge encoded in the model was left mostly untouched. Essentially, the model *kept its foundation intact* while integrating new tasks.
+| **Method**               | **5-task Accuracy (%)** | **15-task Accuracy (%)** |
+|--------------------------|-------------------------|--------------------------|
+| SeqFT                    | 28.5                    | 7.4                      |
+| SeqLoRA                  | 43.7                    | 1.6                      |
+| IncLoRA                  | 66.4                    | 61.2                     |
+| Replay                   | 57.8                    | 54.2                     |
+| EWC                      | 48.7                    | 45.1                     |
+| LwF                      | 52.3                    | 46.9                     |
+| L2P                      | 60.7                    | 56.1                     |
+| LFPT5                    | 72.7                    | 69.2                     |
+| O-LoRA (Previous SOTA ⭐️) | 75.8                    | 69.6                     |
+| **Ours (Adaptive SVD)** 🚀| **75.9**                 | **71.3**                  |
 
-### Safety and Instruction-Following Retention
+**Key Insights:**
 
-Finally, we examine the model’s **alignment properties** – specifically, its safety behavior and its ability to follow generic user instructions – before and after continual learning. In an enterprise or real-world deployment, it’s crucial that updating the model on new domain data does not compromise the safeguards (like refusing to produce toxic or disallowed content) or the general helpfulness of the assistant.
+- On the challenging **15-task scenario**, our method outperforms state-of-the-art O-LoRA (**71.3% vs. 69.6%**).
+- For the **standard 5-task scenario**, our approach achieves slightly better accuracy (**75.9% vs. 75.8%**), highlighting its stability even with fewer tasks.
+- Our approach clearly surpasses traditional replay buffers, naive fine-tuning (SeqFT), and parameter-efficient methods, demonstrating robust knowledge retention without catastrophic forgetting.
 
-We evaluated the *safety* aspect by using a set of safety-critical prompts (requests for disallowed content, harmful instructions, etc.) and measuring the fraction of responses that remained safe (e.g., the model refused or answered in a harmless manner). For *instruction-following*, we used a mix of user instructions outside the fine-tuned tasks (general queries, some drawn from the original instruction-tuning data) and measured how well the model responded (this was scored by a reward model for helpfulness). We compare the base model, a naive fine-tuned model, and our method.
+---
 
-<!-- Table 4 image: safety_comparison.png -->
-**Table 4: Alignment preservation (Safety and Instruction-following).** We show the safety compliance rate (% of unsafe requests properly refused) and a normalized instruction-following score for a model before and after continual training. Sculpting Subspaces largely preserves alignment, whereas naive fine-tuning degrades it (making the model less safe and less reliable in following general instructions).
+## TRACE Benchmark: Real-World, Complex Tasks
 
-| Model Variant            | Safety Compliance (%) | Instruction Score (0-100) |
-|--------------------------|----------------------:|--------------------------:|
-| Original Aligned LLM     | 92%   | 100  |
-| After tasks (naive FT)   | 75%   | 81   |
-| After tasks (ours)       | **89%**   | **95**   |
+The TRACE benchmark presents a realistic and challenging scenario designed explicitly to test continual learning methods on instruction-following and reasoning tasks. Here, we used the LLaMA-2-7B-Chat model, evaluating our method on diverse tasks covering multilingual comprehension, arithmetic reasoning, coding, and more.
 
-As **Table 4** shows, the *original model* was carefully aligned (safety compliance ~92% on our test set, and a strong instruction-following ability scored at 100 by definition). After continual fine-tuning on new tasks without constraints, the model’s safety compliance dropped to 75% – it started giving unsafe outputs to some queries that it originally would have refused. This likely happened because fine-tuning on new data (which might not emphasize the same safety instructions) caused it to *forget some of its RLHF-induced caution*. The general instruction-following capability also dropped: the model became more narrow and less able to handle arbitrary instructions (score 81). **Sculpting Subspaces**, on the other hand, preserved alignment exceedingly well – the safety compliance only slightly decreased (89%, still near the original level) and the instruction-following score remained very high (95). In practice, the outputs of our continually trained model remained just as polite, refusal-capable, and helpful as the original foundational model, even though we never explicitly “re-aligned” it during the new task training. We simply made sure not to move the weights in directions that would undo that alignment.
+### **TRACE Benchmark Performance (LLaMA-2-7B-Chat)**
 
-## Conclusion: Toward Continual Deployment of LLMs
+| **Method**                 | **Average Accuracy (%)** | **Backward Transfer (%)** |
+|----------------------------|--------------------------|---------------------------|
+| SeqFT                      | 23.0                     | -8.3 (Forgetting ❌)       |
+| O-LoRA (Previous SOTA ⭐️)  | 41.3                     | 6.2                       |
+| **Ours (Adaptive SVD)** 🚀  | **48.4**                 | **7.1**                   |
+| PerTaskFT (Ideal baseline) | 57.6                     | N/A                       |
+| MTL (Upper bound)          | 52.3                     | N/A                       |
 
-*Sculpting Subspaces* offers a powerful solution for **continual learning in LLMs** that combines the best of both worlds: we fine-tune all model parameters for each new task (so the model can fully adapt and use its capacity), but we *mathematically constrain* those updates to avoid interference with previously learned knowledge. This constrained full fine-tuning yields a model that **learns continuously without forgetting**, preserving both past task performance and the general purpose abilities and safety features of a foundation model.
+**Key Insights:**
 
-Key reasons why this approach is a strong candidate for real-world post-training of LLMs include:
+- Our adaptive SVD approach achieved **48.4% average accuracy**, clearly surpassing O-LoRA (**41.3%**)—a substantial margin indicating significantly reduced catastrophic forgetting. *(Average accuracy is computed across all tasks after the final task has been learned in sequence.)*
+- Remarkably, we achieved the best backward transfer (7.1%), meaning our method not only maintains previous knowledge but sometimes even slightly improves earlier tasks—a key marker of successful continual learning. (Backward transfer measures the difference between accuracy on a task after the final task is learned and its accuracy immediately after it was first learned.)*
 
-- **No Replay or Data Retention:** We do not require storing any past data for rehearsal. This is crucial for privacy and feasibility in production systems, where you may not be allowed to keep or reuse old task data.
-- **Efficiency and Scalability:** The method adds only a small overhead per task (a low-dimensional subspace basis). It doesn’t spawn an ever-growing ensemble of adapters or experts. The model remains a single set of weights with minor metadata, making deployment simple even as it learns dozens of tasks.
-- **Maximal Utilization of Model Capacity:** By tuning all weights (within allowed directions), the model can achieve performance comparable to brute-force fine-tuning and sometimes even benefit from forward transfer (using previous knowledge to help learn new tasks). It avoids the capacity limitations that purely frozen or small-adapter methods might encounter on complex tasks.
-- **Theoretical Guarantees of Forgetting Reduction:** The orthogonal projection framework provides a principled guarantee that interference is minimized. This gives practitioners confidence that deploying an update for Task N won’t wreck the model’s behavior on Tasks 1 through N-1 or general capabilities.
-- **Alignment Preservation:** Perhaps most importantly for deployment, we demonstrated that alignment and safety can be maintained. This means enterprises can keep their models updated with new knowledge without having to re-do expensive alignment training from scratch or worry that each update might make the model go rogue on previous ethical/safety constraints.
+### **General Ability Across Core Capabilities**
 
-In a continually evolving world, *change is the only constant* – and LLMs need to keep up. Sculpting Subspaces enables **lifelong learning for LLMs** in a practical and theoretically grounded way. It provides a path toward LLMs that can be deployed once and then **learn on the job** indefinitely, **sculpting** their knowledge incrementally while **safeguarding** the core competencies that make them so powerful to begin with.
+One critical requirement for real-world enterprise deployment is that models preserve their **general linguistic and reasoning abilities** even after continual updates. This includes a broad set of capabilities such as factual knowledge, general and commonsense reasoning, reading comprehension, and multilingual understanding. To evaluate this, we use a set of diverse benchmarks covering key dimensions from TRACE:
+
+- **Factual Knowledge** (MMLU)  
+- **General Reasoning** (BBH)  
+- **Commonsense Reasoning** (PIQA)  
+- **Reading Comprehension** (BoolQA)  
+- **Multilingual Understanding** (TyDiQA)  
+- **Math Reasoning** (GSM)
+
+![General Ability Evaluation](/assets/img/posts/2025-04-04-orthogonal-subspace-learning/general_ability.png)
+
+*Figure: General ability evaluation across six core dimensions—factual knowledge (MMLU), general reasoning (BBH), commonsense reasoning (PIQA), reading comprehension (BoolQA), multilingual understanding (TyDiQA), and math reasoning (GSM).*
+
+Our method effectively preserves or even improves performance across most general ability tasks, with particularly strong gains in multilinguality, reading comprehension, and commonsense reasoning. The modest drop in arithmetic and general reasoning is likely due to these tasks’ reliance on longer, multi-step computation paths, which are more sensitive to fine-tuning.
+
+### 🛡️ **Preservation of Instruction-Following and Safety**
+
+We also evaluated instruction-following and safety, comparing our approach directly against the original LLaMA-2-7B-chat model:
+
+| **Method**                 | **Instruction-Following (Win/Tie/Lose %)** | **Safety (Win/Tie/Lose %)** |
+|----------------------------|--------------------------------------------|-----------------------------|
+| Replay                     | 10 / 18 / 72                               | 0 / 88 / 12                 |
+| LoRASeqFT                  | 3 / 4 / 94                                 | 0 / 86 / 14                 |
+| SeqFT                      | 14 / 34 / 53                               | 0 / 98 / 2                  |
+| **Ours (Adaptive SVD)** 🚀  | **24 / 56 / 20**                           | **18 / 78 / 4**             |
+
+Our method significantly outperforms all other continual learning baselines in retaining both instruction-following abilities and model safety, crucial for maintaining trust and reliability in real-world deployments.
+
+---
+
+## **Summarizing the Impact**
+
+In short, these extensive evaluations clearly demonstrate that our Adaptive SVD method is more than just a novel theoretical idea—it represents a meaningful, practical breakthrough in continual learning:
+
+- **Outperforms the previous state-of-the-art (O-LoRA)** on diverse continual learning benchmarks.
+- **Dramatically reduces catastrophic forgetting**, ensuring stable, lifelong learning.
+- **Maintains general linguistic capabilities, safety, and instruction-following**, essential properties for practical enterprise adoption.
+
+---
+
+## 🚀 Why Enterprises Should Care: Real-World Impact
+
+At the end of the day, technology only matters if it genuinely solves real-world problems—especially in enterprise environments. So, why should enterprises care about our Adaptive SVD approach?
+
+### 1. **Seamless Continual Adaptation**
+
+In the real world, new data, tasks, products, and policies arrive almost daily. With our method, large language models can now continuously adapt to this stream of changes—without sacrificing previous knowledge. Enterprises no longer have to choose between constant retraining or risking outdated models. Instead, you get a single, stable, continuously learning model.
+
+### 2. **Massive Infrastructure Savings**
+
+Today, companies often deploy separate specialized models or expensive ensembles for different tasks or departments. This approach quickly becomes unsustainable. Our Adaptive SVD solution significantly reduces costs by enabling a single adaptable model to handle multiple tasks seamlessly, dramatically cutting storage requirements, computational resources, and maintenance overhead.
+
+### 3. **Trustworthy and Reliable Deployments**
+
+Beyond raw performance, enterprises must ensure their models are safe, trustworthy, and reliably follow instructions. Our method explicitly preserves general linguistic capabilities, safety, and instruction-following accuracy. This is a massive win, helping enterprises maintain customer trust, comply with safety standards, and ensure consistent, reliable interactions.
+
+In short, our approach transforms continual learning from a theoretical concept into a practical, scalable solution—perfectly suited for the fast-paced, constantly evolving demands of modern enterprise environments.
+
+---
+
+## Limitations and Exciting Future Directions
+
+Of course, no method is perfect. While our Adaptive SVD approach is highly effective, we want to transparently discuss a few important limitations and highlight opportunities for future improvement:
+
+- **Rank Estimation Sensitivity:**  
+  Our approach depends significantly on correctly estimating the optimal "rank"—the balance between preserving knowledge and learning new tasks. Inaccurate estimates can degrade performance. Future research will explore more robust, theoretically grounded ways to automatically and dynamically estimate effective ranks.
+
+- **Computational Overheads of SVD:**  
+  While our method avoids unbounded parameter growth, repeated SVD computations introduce overhead. Efficiency may be improved by restricting SVD to a subset of layers (e.g., attention projections) or using faster approximations.
+
+- **Dynamic Capacity Allocation for Long Task Streams:**  
+  Our current method pre-allocates subspace budgets, which can limit scalability over long task sequences. A promising future direction is to explore flexible or adaptive subspace management strategies that adjust capacity based on task complexity or model usage.
+
+---
+
+## Conclusion: Toward Truly Lifelong Learning Models
+
+Catastrophic forgetting has long stood as a formidable barrier to deploying large language models in continuously evolving real-world scenarios. Existing solutions—replay buffers, parameter-efficient methods like LoRA, and complex model merging—have significant practical drawbacks.
+
+Our novel solution, Adaptive SVD—**Sculpting Subspaces**—addresses these limitations head-on by intelligently updating models in unused parameter subspaces while carefully preserving crucial knowledge. Our approach delivers impressive results:
+
+- ✅ **State-of-the-art accuracy** across diverse benchmarks.
+- ✅ **Significant reduction in forgetting**.
+- ✅ **Stable general linguistic capabilities**, instruction-following, and safety.
+
+Ultimately, our method bridges theory and practice, enabling enterprises to deploy truly adaptive, continuously learning models at scale. It’s a crucial advance towards practical, lifelong-learning systems that seamlessly evolve in step with our ever-changing world. We believe this is just the beginning. This approach brings us one significant step closer to genuinely adaptive AI, ready to meet the complex and ever-changing demands of tomorrow.
+
+---
+
+## 🔗 Resources and Follow Us
+
+Thanks for joining us on this journey through our paper and approach. We're excited about what’s next, and we hope you are too!
+
+- 💻 **Code Repository**: [github.com/Red-Hat-AI-Innovation-Team/orthogonal-subspace-learning](https://github.com/Red-Hat-AI-Innovation-Team/orthogonal-subspace-learning)  
+- 📢 **Stay Updated**: Follow our latest research and updates at [red-hat-ai-innovation-team.github.io](https://red-hat-ai-innovation-team.github.io)
+
+---
+
+## 📚 References
+
+- Brown, T. et al. (2020). [Language Models are Few-Shot Learners](https://arxiv.org/abs/2005.14165).
+- Chowdhery, A. et al. (2022). [PaLM: Scaling Language Modeling with Pathways](https://arxiv.org/abs/2204.02311).
+- Hartford, J. et al. (2024). [Spectrum: Targeted Training on Signal to Noise Ratio](https://arxiv.org/abs/2406.06623).
+- Houlsby, N. et al. (2019). [Parameter-Efficient Transfer Learning for NLP](https://arxiv.org/abs/1902.00751).
+- Hu, E. J. et al. (2022). [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/abs/2106.09685).
+- Kirkpatrick, J. et al. (2017). [Overcoming Catastrophic Forgetting in Neural Networks](https://arxiv.org/abs/1612.00796).
+- Liang, Z. et al. (2024). [InfLoRA: Interference-free Low-Rank Adaptation for Continual Learning](https://arxiv.org/abs/2404.00228).
+- Sharma, U. et al. (2023). [LASER: The Truth is in There: Improving Reasoning in Language Models with Layer-Selective Rank Reduction](https://arxiv.org/abs/2312.13558).
+- Touvron, H. et al. (2023). [LLaMA: Open and Efficient Foundation Language Models](https://arxiv.org/abs/2302.13971).
+- Wang, J. et al. (2024). [O-LoRA: Orthogonal Subspace Learning for Language Model Continual Learning](https://openreview.net/forum?id=L7ZBpZZ8Va).
+- Wang, Y. et al. (2023). [TRACE: A Comprehensive Benchmark for Continual Learning in Large Language Models](https://arxiv.org/abs/2310.06762).
+- Zenke, F. et al. (2017). [Continual Learning through Synaptic Intelligence](https://arxiv.org/abs/1703.04200).
+- Zhang, X. et al. (2015). [Character-level Convolutional Networks for Text Classification](https://arxiv.org/abs/1509.01626).
