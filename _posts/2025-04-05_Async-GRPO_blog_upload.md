@@ -1,5 +1,5 @@
 ---
-title: Async-GRPO: Open, Fast, and Performant
+title: Async-GRPO - Open, Fast, and Performant
 date: 2025-04-05
 ---
 
