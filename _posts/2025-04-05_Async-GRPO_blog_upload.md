@@ -2,6 +2,7 @@
 title: Async-GRPO: Open, Fast, and Performant
 date: 2025-04-05
 ---
+
 Written by Aldo Pareja, Mustafa Eyceoz
 
 ## Introducing Async-GRPO
