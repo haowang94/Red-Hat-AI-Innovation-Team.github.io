@@ -26,6 +26,8 @@ In this blog post, we describe a recent breakthrough we developed to address thi
 
 We call our method **"Sculpting Subspaces"**—because it selectively reshapes and refines the model's internal parameter space, carving out unused regions for new tasks, all the while carefully preserving essential prior knowledge. In the following sections, we'll dive deeper into the concept of catastrophic forgetting, explore the limitations of existing solutions, and then fully unveil how our adaptive singular value decomposition (SVD)-based approach can radically transform the way we think about continual learning and enterprise-scale deployment of large language models.
 
+---
+
 ## The Elephant in the Room: Catastrophic Forgetting
 
 Imagine you're training an intelligent assistant to handle customer support at your company. Initially, the assistant learns everything about your current products and customer needs. It performs brilliantly—answering questions, handling complaints, and providing clear solutions. A few months later, your company launches a new product line. Naturally, you update your assistant to understand and support these new products. But then something surprising and frustrating happens: suddenly, the assistant struggles to answer basic questions about your older products—questions it previously answered flawlessly.
@@ -39,6 +41,8 @@ This phenomenon isn't hypothetical; it’s a well-known, pervasive problem in ma
 The issue is further magnified by the fact that in practical scenarios, updates aren't occasional—they're **frequent and continuous**. Enterprises experience a near-constant influx of data, shifting customer expectations, and evolving business strategies. If every incremental update to the language model leads to catastrophic forgetting, the model quickly becomes unreliable and potentially unusable, resulting in lost trust, increased operational costs, and significant frustration among users and stakeholders.
 
 Thus, catastrophic forgetting is not just a theoretical curiosity—it’s a profound challenge that urgently demands robust solutions. If large language models are to realize their full potential in the real world, we must equip them with the capability to **continuously learn, update, and adapt**—without losing their accumulated knowledge.
+
+---
 
 ## Why Existing Solutions Fall Short
 
@@ -61,8 +65,6 @@ However, while replay buffers help to some extent, they introduce several practi
 
 So, while replay buffers seem promising at first glance, they're hardly a silver bullet. In many realistic deployments, especially involving LLMs, replay buffers simply aren't a practical solution.
 
----
-
 ### **Parameter-Efficient Methods (Adapters, LoRA)**: Efficient but Constrained
 
 To avoid replay altogether, researchers have turned towards methods that **freeze most of the pretrained model parameters** and only update small task-specific subsets. Popular methods in this category include Adapters and Low-Rank Adaptation (LoRA). The intuition here is clear: by limiting parameter updates to a tiny fraction of the model, interference with previously learned knowledge should be minimized.
@@ -80,8 +82,6 @@ However, despite their efficiency, these methods have serious limitations:
 
 So yes, LoRA might be efficient. But let's be blunt—if your goal is to maintain state-of-the-art performance in continuously evolving tasks, it’s ultimately a waste of your valuable time (😜).
 
----
-
 ### **Model Merging Methods (SLERP, TIES)**: Powerful but Impractical
 
 Another creative line of solutions involves **model merging methods**—approaches like SLERP (Spherical Linear Interpolation) or TIES (Task-Informed Ensemble Synthesis). These methods train separate models or adapters for each task and later combine (or merge) their parameters into a unified model.
@@ -97,11 +97,9 @@ Though conceptually elegant, these techniques quickly run into their own set of 
 - **Suboptimal Performance:**  
   Even after extensive tuning, model merging typically achieves lower performance than training a single model simultaneously on all tasks (multitask learning). Achieving good results consistently requires a prohibitive amount of experimentation and fine-tuning.
 
-For real-world enterprise deployments, this complexity makes model merging largely impractical. You need something simpler, more efficient, and easier to maintain.
+For real-world enterprise deployments, this complexity makes model merging largely impractical. You need something simpler, more efficient, and easier to maintain. Given these limitations, we clearly need a fresh perspective—one that offers a fundamentally new approach to continual learning. And that's exactly what we'll introduce next.
 
 ---
-
-Given these limitations, we clearly need a fresh perspective—one that offers a fundamentally new approach to continual learning. And that's exactly what we'll introduce next.
 
 ## Sculpting Subspaces: A Novel Solution Using Adaptive SVD
 
@@ -128,8 +126,6 @@ By clearly identifying these directions, we can "sculpt" our parameter updates s
 - **Low-rank directions (small singular values)**: Safely update these directions to learn new tasks, since they don't significantly impact previous knowledge.
 
 This intuitive approach elegantly balances knowledge retention (stability) with flexibility for learning new information (plasticity)—exactly what's needed for continual learning.
-
----
 
 ### **Under the Hood: How Adaptive SVD Enables Continual Learning**
 
@@ -184,6 +180,8 @@ Finally, when updating model parameters, we ensure that updates remain completel
 
 By projecting gradients this way, we guarantee that every update for a new task is safely confined to the unused low-rank subspace, leaving the model’s previous knowledge intact. Leveraging the internal geometry of LLM parameters, we efficiently balance stability and adaptability, opening the door for genuinely lifelong learning in real-world deployments.
 
+---
+
 ## Results that Speak for Themselves: Empirical Evaluation 🚀
 
 Great theories and clever methods are exciting—but at the end of the day, what matters most are results. Can our adaptive SVD-based approach truly solve catastrophic forgetting? Can it outperform state-of-the-art solutions like O-LoRA? Let's find out!
@@ -195,9 +193,7 @@ To answer these questions thoroughly, we evaluated our method on two distinct se
 
 Let's explore the results step by step.
 
----
-
-## 🧑‍🔬 Standard Continual Learning (CL) Benchmarks
+### 🧑‍🔬 Standard Continual Learning (CL) Benchmarks
 
 We first evaluated our method on two widely-used CL benchmarks:
 
@@ -214,7 +210,7 @@ We compared our method against multiple baseline techniques, including:
 
 Here's how our Adaptive SVD method stacks up:
 
-### 🎯 **Performance on Standard CL Benchmarks (T5-Large Model)**
+#### 🎯 **Performance on Standard CL Benchmarks (T5-Large Model)**
 
 | **Method**               | **5-task Accuracy (%)** | **15-task Accuracy (%)** |
 |--------------------------|-------------------------|--------------------------|
@@ -235,13 +231,11 @@ Here's how our Adaptive SVD method stacks up:
 - For the **standard 5-task scenario**, our approach achieves slightly better accuracy (**75.9% vs. 75.8%**), highlighting its stability even with fewer tasks.
 - Our approach clearly surpasses traditional replay buffers, naive fine-tuning (SeqFT), and parameter-efficient methods, demonstrating robust knowledge retention without catastrophic forgetting.
 
----
-
-## TRACE Benchmark: Real-World, Complex Tasks
+### TRACE Benchmark: Real-World, Complex Tasks
 
 The TRACE benchmark presents a realistic and challenging scenario designed explicitly to test continual learning methods on instruction-following and reasoning tasks. Here, we used the LLaMA-2-7B-Chat model, evaluating our method on diverse tasks covering multilingual comprehension, arithmetic reasoning, coding, and more.
 
-### **TRACE Benchmark Performance (LLaMA-2-7B-Chat)**
+#### **TRACE Benchmark Performance (LLaMA-2-7B-Chat)**
 
 | **Method**                 | **Average Accuracy (%)** | **Backward Transfer (%)** |
 |----------------------------|--------------------------|---------------------------|
@@ -256,7 +250,7 @@ The TRACE benchmark presents a realistic and challenging scenario designed expli
 - Our adaptive SVD approach achieved **48.4% average accuracy**, clearly surpassing O-LoRA (**41.3%**)—a substantial margin indicating significantly reduced catastrophic forgetting. *(Average accuracy is computed across all tasks after the final task has been learned in sequence.)*
 - Remarkably, we achieved the best backward transfer (7.1%), meaning our method not only maintains previous knowledge but sometimes even slightly improves earlier tasks—a key marker of successful continual learning. (Backward transfer measures the difference between accuracy on a task after the final task is learned and its accuracy immediately after it was first learned.)*
 
-### **General Ability Across Core Capabilities**
+#### **General Ability Across Core Capabilities**
 
 One critical requirement for real-world enterprise deployment is that models preserve their **general linguistic and reasoning abilities** even after continual updates. This includes a broad set of capabilities such as factual knowledge, general and commonsense reasoning, reading comprehension, and multilingual understanding. To evaluate this, we use a set of diverse benchmarks covering key dimensions from TRACE:
 
@@ -273,7 +267,7 @@ One critical requirement for real-world enterprise deployment is that models pre
 
 Our method effectively preserves or even improves performance across most general ability tasks, with particularly strong gains in multilinguality, reading comprehension, and commonsense reasoning. The modest drop in arithmetic and general reasoning is likely due to these tasks’ reliance on longer, multi-step computation paths, which are more sensitive to fine-tuning.
 
-### 🛡️ **Preservation of Instruction-Following and Safety**
+#### 🛡️ **Preservation of Instruction-Following and Safety**
 
 We also evaluated instruction-following and safety, comparing our approach directly against the original LLaMA-2-7B-chat model:
 
@@ -286,9 +280,7 @@ We also evaluated instruction-following and safety, comparing our approach direc
 
 Our method significantly outperforms all other continual learning baselines in retaining both instruction-following abilities and model safety, crucial for maintaining trust and reliability in real-world deployments.
 
----
-
-## **Summarizing the Impact**
+### **Summarizing the Impact**
 
 In short, these extensive evaluations clearly demonstrate that our Adaptive SVD method is more than just a novel theoretical idea—it represents a meaningful, practical breakthrough in continual learning:
 
