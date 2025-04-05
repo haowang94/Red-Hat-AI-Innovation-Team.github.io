@@ -124,7 +124,7 @@ ray start --address=head_node_ip:6379
 
 #### Inference workers
 
-Once the Ray cluster has been set up, the next step is to spin up the inference workers (this includes both the vLLM rollout workers and the reference logprob workers). One each node being used for inference, launch inference workers on the desired GPUs. For example, in our case we had 11 vLLM rollout workers across our 16 GPUs and one logprob worker.
+Once the Ray cluster has been set up, the next step is to spin up the inference workers (this includes both the vLLM rollout workers and the reference logprob workers). On each node being used for inference, launch inference workers on the desired GPUs. For example, in our case we had 11 vLLM rollout workers across our 16 GPUs and one logprob worker.
 
 On one node, we ran the following for 8 vLLM rollout workers:
 ```
