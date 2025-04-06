@@ -42,12 +42,12 @@ portfolio:
     - image: /images/training.png
       title: training
       link: https://github.com/instructlab/training
-      description: Efficient messages-format SFT library for language models
+      description: Efficient messages-format SFT library for language models.
 
     - image: /images/gallery-03.jpg
       title: async-grpo
       link: https://github.com/Red-Hat-AI-Innovation-Team/async-grpo
-      description: description goes here
+      description: Asynchronous GRPO library for scalable reinforcement learning.
 
     - image: /images/gallery-04.jpg
       title: SQuat
