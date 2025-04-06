@@ -80,10 +80,10 @@ On the MATH dataset, our method:
 - Can scale Qwen2.5 Math 1.5B Instruct to GPT-4o accuracy with only 4 rollouts!
 - Can scale Qwen2.5 Math 7B Instruct achieves o1 level accuracy with only 32 rollouts!
 - Can scale Llama 1B model to almost reach Llama 70B and can scale Llama 8B model to reach GPT-4o!
-- ![](/assets/img/posts/2025-02-05-r1-like-reasoning/table.png)  
-- ![](/assets/img/posts/2025-02-05-r1-like-reasoning/llama-1b.png)  
-- ![](/assets/img/posts/2025-02-05-r1-like-reasoning/llama-8b.png)
-- ![](/assets/img/posts/2025-02-05-r1-like-reasoning/qwen-7b.png)
+- ![](/images/posts/2025-02-05-r1-like-reasoning/table.png)  
+- ![](/images/posts/2025-02-05-r1-like-reasoning/llama-1b.png)  
+- ![](/images/posts/2025-02-05-r1-like-reasoning/llama-8b.png)
+- ![](/images/posts/2025-02-05-r1-like-reasoning/qwen-7b.png)
 
 
 ### Why is this so cool? 
@@ -133,12 +133,12 @@ If you’re curious about steps 4 and 5, here’s a paper from our team explaini
 
 So now we are looking for a way to obtain R1-like reasoning in small LLMs. We came up with a recipe that does not use DeepSeek-R1 nor its derivatives, and that is we are working on at the moment. Here is a side-by-side comparison between DeepSeek’s approach and our recipe.
 
-|  | DeepSeek | Us |
-| :---- | :---- | :---- |
-| R1-Zero / Reasoning Data | R1-Zero (???B), few-shot CoT, reflection-verification prompting | Phi-4 (14B) w/ inference-time scaling (BoN, Gibbs, PF) |
-| Warm Start | DeepSeek-V3-base (???B) | Granite-3.1-Lab (8B), Llama-3.1-Instruct (8B), Phi-4 (14B) |
-| RL for Reasoning | GRPO | GRPO |
-| General Capability | Rejection Sampling \+ SFT \-\> Preference Tuning | DPO w/ Dr. SoW |
+|                          | DeepSeek                                                        | Us                                                         |
+| :----------------------- | :-------------------------------------------------------------- | :--------------------------------------------------------- |
+| R1-Zero / Reasoning Data | R1-Zero (???B), few-shot CoT, reflection-verification prompting | Phi-4 (14B) w/ inference-time scaling (BoN, Gibbs, PF)     |
+| Warm Start               | DeepSeek-V3-base (???B)                                         | Granite-3.1-Lab (8B), Llama-3.1-Instruct (8B), Phi-4 (14B) |
+| RL for Reasoning         | GRPO                                                            | GRPO                                                       |
+| General Capability       | Rejection Sampling \+ SFT \-\> Preference Tuning                | DPO w/ Dr. SoW                                             |
 
 ### Here's a breakdown
 
@@ -251,15 +251,15 @@ With these different approaches—D-stitch, D-backtrack, and D-but-wait—we’r
 
 Let’s see where this takes us. 🚀
 
-| Model | Dataset | Method | AIME 2024 (Pass@8) | MATH500 (Pass@8) |
-| ----- | ----- | ----- | ----- | ----- |
-| [Llama 3.1 8B Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) | \- | \- | 6/30 | 73.6 |
-|  | [bespokelabs/Bespoke-Stratos-35k](https://huggingface.co/datasets/bespokelabs/Bespoke-Stratos-35k) | SFT | ⏳ | ⏳ |
-|  | Think-v1-13k (ours) | SFT \+ GRPO | 7/30 | 80.2 |
-| [Phi-4](https://huggingface.co/microsoft/phi-4) | \- | \- | 12/30 | 88.2 |
-|  | Think-v1-13k (ours) | SFT \+ Dr.SoW | 10/30 | 90.8 |
-|  | But-wait-10k (ours) | SFT \+ GRPO | 10/30 | 87.8 |
-|  | Backtrack-22k(ours) | SFT \+ GRPO | 10/30 | ⏳ |
+| Model                                                                            | Dataset                                                                                            | Method        | AIME 2024 (Pass@8) | MATH500 (Pass@8) |
+| -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------- | ------------------ | ---------------- |
+| [Llama 3.1 8B Instruct](https://huggingface.co/meta-llama/Llama-3.1-8B-Instruct) | \-                                                                                                 | \-            | 6/30               | 73.6             |
+|                                                                                  | [bespokelabs/Bespoke-Stratos-35k](https://huggingface.co/datasets/bespokelabs/Bespoke-Stratos-35k) | SFT           | ⏳                  | ⏳                |
+|                                                                                  | Think-v1-13k (ours)                                                                                | SFT \+ GRPO   | 7/30               | 80.2             |
+| [Phi-4](https://huggingface.co/microsoft/phi-4)                                  | \-                                                                                                 | \-            | 12/30              | 88.2             |
+|                                                                                  | Think-v1-13k (ours)                                                                                | SFT \+ Dr.SoW | 10/30              | 90.8             |
+|                                                                                  | But-wait-10k (ours)                                                                                | SFT \+ GRPO   | 10/30              | 87.8             |
+|                                                                                  | Backtrack-22k(ours)                                                                               | SFT \+ GRPO   | 10/30              | ⏳                |
 
 ---
 
